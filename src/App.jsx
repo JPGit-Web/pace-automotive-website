@@ -159,16 +159,26 @@ export default function App() {
               <span>Address:</span> Unit D 8240 31 St SE T2C 1H9, Calgary, AB
             </p>
 
-            <div className="contactBtns">
+            <p className="contactNote">
+              For any questions or inquiries, please email us at{" "}
+              <a href="mailto:powerautomotivecentre1@gmail.com">
+                powerautomotivecentre1@gmail.com
+              </a>{" "}
+              or call{" "}
+              <a href="tel:14034534554">(403) 453-4554</a>.
+            </p>
+
+
+            {/* <div className="contactBtns">
               <a className="btn btnPrimary" href="#booking">Book</a>
               <a className="btn btnGhost" href="tel:+14030000000">Call Now</a>
-            </div>
+            </div> */}
           </div>
 
           <div className="mapCard">
             <iframe
               title="P.A.C.E. Location Map"
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2511.943579792164!2d-113.99026632224191!3d50.980233471698156!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x53717a06f9d3ada1%3A0x2b41ece6116618d9!2s8240%2031%20St%20SE%20D%2C%20Calgary%2C%20AB%20T2C%201H9!5e0!3m2!1sen!2sca!4v1768685555052!5m2!1sen!2sca" 
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2511.943579792164!2d-113.99026632224191!3d50.980233471698156!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x53717a06f9d3ada1%3A0x2b41ece6116618d9!2s8240%2031%20St%20SE%20D%2C%20Calgary%2C%20AB%20T2C%201H9!5e0!3m2!1sen!2sca!4v1768685555052!5m2!1sen!2sca"
               width="100%"
               height="320"
               style={{ border: 0, borderRadius: "16px" }}
