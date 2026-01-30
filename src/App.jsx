@@ -146,10 +146,10 @@ export default function App() {
           <div className="contactCard">
             <h3 className="contactTitle">Contact Details</h3>
             <p className="contactLine">
-              <span>Phone:</span> <a href="tel:+14030000000">(403) 453-4554</a>
+              <span>Phone:</span> <a href="tel:+14034534554">(403) 453-4554</a>
             </p>
             <p className="contactLine">
-              <span>Email:</span> <a href="mailto:info@paceauto.ca">powerautomotivecentre1@gmail.com</a>
+              <span>Email:</span> <a href="mailto:admin@powerautomotive.ca">admin@powerautomotive.ca</a>
             </p>
             <p className="contactLine">
               <span>Hours:</span> Mon–Fri 8am–6pm
@@ -161,8 +161,8 @@ export default function App() {
 
             <p className="contactNote">
               For any questions or inquiries, please email us at{" "}
-              <a href="mailto:powerautomotivecentre1@gmail.com">
-                powerautomotivecentre1@gmail.com
+              <a href="mailto:admin@powerautomotive.ca">
+                admin@powerautomotive.ca
               </a>{" "}
               or call{" "}
               <a href="tel:14034534554">(403) 453-4554</a>.
