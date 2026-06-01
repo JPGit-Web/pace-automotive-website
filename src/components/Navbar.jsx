@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
 
 const links = [
-  { label: "Home", href: "#home" },
-  { label: "About", href: "#about" },
+  { label: "Home",     href: "#home" },
+  { label: "About",    href: "#about" },
   { label: "Services", href: "#services" },
-  { label: "Contact", href: "#contact" },
+  { label: "Contact",  href: "#contact" },
 ];
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
+    const onScroll = () => setScrolled(window.scrollY > 10);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -19,27 +20,32 @@ export default function Navbar() {
 
   const goTo = (e, href) => {
     e.preventDefault();
-
+    setMenuOpen(false);
     const el = document.querySelector(href);
     if (!el) return;
-
     el.scrollIntoView({ behavior: "smooth", block: "start" });
-
-    // keeps URL hash in sync without the “jump”
     window.history.replaceState(null, "", href);
   };
 
   return (
     <header className={`nav navV2 ${scrolled ? "navScrolled" : ""}`}>
-      <div className="navInner navInnerV2">
-        <a className="brand brandV2" href="#home" onClick={(e) => goTo(e, "#home")} aria-label="Go to home">
+      <div className="container navInnerV2">
+
+        {/* Brand */}
+        <a
+          className="brand brandV2"
+          href="#home"
+          onClick={(e) => goTo(e, "#home")}
+          aria-label="P.A.C.E. — Power Automotive Centre of Excellence — go to home"
+        >
           <span className="brandTextStack">
             <span className="brandTop">Power Automotive</span>
-            <span className="brandBottom"><em>Centre of Excellence</em></span>
+            <span className="brandBottom">Centre of Excellence</span>
           </span>
         </a>
 
-        <nav className="navLinks navLinksV2" aria-label="Primary navigation">
+        {/* Desktop nav links */}
+        <nav className="navLinksV2" aria-label="Primary navigation">
           {links.map((l) => (
             <a
               key={l.href}
@@ -52,9 +58,15 @@ export default function Navbar() {
           ))}
         </nav>
 
-        <a className="btn btnPrimary btnSmall navCta" href="#booking" onClick={(e) => goTo(e, "#booking")}>
-          OPENING SOON
+        {/* CTA */}
+        <a
+          className="btn btnRed navCta"
+          href="#contact"
+          onClick={(e) => goTo(e, "#contact")}
+        >
+          Book Appointment
         </a>
+
       </div>
     </header>
   );

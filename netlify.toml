@@ -1,0 +1,19 @@
+[build]
+  command   = "npm run build"
+  publish   = "dist"
+  functions = "netlify/functions"
+
+[dev]
+  command     = "vite"
+  port        = 8888
+  targetPort  = 5173
+  autoLaunch  = false
+
+# SPA fallback — all non-asset routes serve index.html
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
+
+[functions]
+  node_bundler = "esbuild"

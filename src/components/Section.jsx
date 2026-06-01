@@ -1,13 +1,10 @@
-export default function Section({ id, title, subtitle, children, variant }) {
-  const classes = ["section"];
-  if (variant === "hero") classes.push("sectionHero");
-
+export default function Section({ id, title, subtitle, children }) {
   return (
-    <section id={id} className={classes.join(" ")}>
+    <section id={id} className="section">
       <div className="container">
-        {(title || subtitle) && variant !== "hero" && (
+        {(title || subtitle) && (
           <header className="sectionHeader">
-            {title && <h2 className="sectionTitle">{title}</h2>}
+            {title    && <h2 className="sectionTitle">{title}</h2>}
             {subtitle && <p className="sectionSubtitle">{subtitle}</p>}
           </header>
         )}

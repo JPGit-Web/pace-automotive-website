@@ -3,126 +3,213 @@ import Section from "./components/Section";
 import BookingForm from "./components/BookingForm";
 import Footer from "./components/Footer";
 
+/* ─────────────────────────────────────────
+   Trust Strip data
+   ───────────────────────────────────────── */
+const trustItems = [
+  { icon: "🏠", label: "Family-Owned", script: "Since Day One" },
+  { icon: "📍", label: "Calgary Based", script: "SE Calgary" },
+  { icon: "🤝", label: "Honest Service", script: "No Surprises" },
+  { icon: "🔧", label: "Certified Techs", script: "Done Right" },
+  { icon: "⭐", label: "Opening Soon", script: "Join Us Early" },
+];
+
+/* ─────────────────────────────────────────
+   Services data
+   ───────────────────────────────────────── */
+const services = [
+  { title: "Oil Change & Maintenance",    desc: "Oil changes, fluid top-ups, filter replacements, and routine scheduled maintenance." },
+  { title: "Brakes",                      desc: "Brake inspections, pads, rotors, calipers, and complete brake fluid service." },
+  { title: "Tires",                       desc: "Seasonal tire swaps, flat repairs, rotations, and wheel balancing." },
+  { title: "Diagnostics",                 desc: "Check engine light diagnostics and drivability troubleshooting from bumper to bumper." },
+  { title: "Battery & Electrical",        desc: "Battery testing and replacement, starting/charging concerns, and lighting issues." },
+  { title: "Steering & Suspension",       desc: "Shocks, struts, alignment-related handling concerns, and ride quality repairs." },
+  { title: "Heating & Cooling",           desc: "Cooling system service, thermostat replacement, leak inspection, and overheating repair." },
+  { title: "General Repair",              desc: "Everyday repairs and safety inspections to keep your vehicle road-ready and reliable." },
+];
+
 export default function App() {
   return (
     <>
       <Navbar />
 
-      {/* HERO (template-style) */}
-      <section id="home" className="heroV2">
-        <div className="container heroV2Inner">
-          <div className="heroLeft">
-            <p className="heroKicker">Power Automotive</p>
-            <h1 className="heroHeadline">
-              OPENING SOON
-              <span className="heroDot">!</span>
-            </h1>
+      {/* ─── HERO ─── */}
+      <section id="home" className="heroPoster">
 
-            <p className="heroLead">
-              <strong><em>Centre of Excellence</em></strong> isn’t just a name, it’s how we operate.
-            </p>
-
-            <div className="heroBadges">
-              <span className="pill">Diagnostics</span>
-              <span className="pill">Brakes</span>
-              <span className="pill">Oil & Fluids</span>
-              <span className="pill">Tires</span>
-            </div>
-
-            <div className="heroActions">
-              <a className="btn btnPrimary heroBtn" href="#booking">
-                Request Appointment
-              </a>
-              <a className="btn btnGhost heroBtn" href="#services">
-                View Services
-              </a>
-            </div>
+        {/* Red/Navy top info banner */}
+        <div className="heroBanner">
+          <div className="heroBannerLeft">
+            <span>P.A.C.E. — Power Automotive Centre of Excellence</span>
           </div>
+          <div className="heroBannerRight">
+            <span>(403) 453-4554</span>
+            <span>Unit D 8240-31 St SE, Calgary AB</span>
+            <span>Mon–Fri 8AM–5:30PM</span>
+          </div>
+        </div>
 
-          <div className="heroRight">
-            {/* Circular logo like the template */}
-            <div className="logoRing">
-              <div className="logoCircle">
-                <img src="/pace-logo.png" alt="P.A.C.E. logo" className="logoCircleImg" />
+        <div className="container">
+          <div className="posterFrame">
+
+            {/* Logo + Contact Info */}
+            <div className="posterTop">
+              <div className="posterSign">
+                <img
+                  src="/pace-logo.png"
+                  alt="P.A.C.E. — Power Automotive Centre of Excellence"
+                  className="posterLogoImg"
+                />
+              </div>
+
+              <div className="posterContact">
+                <div className="posterContactHeader">Get In Touch</div>
+
+                <div className="posterContactLine">
+                  <span className="ico">☎</span>
+                  <span>(403) 453-4554</span>
+                </div>
+                <div className="posterContactLine">
+                  <span className="ico">✉</span>
+                  <span>admin@powerautomotive.ca</span>
+                </div>
+                <div className="posterContactLine">
+                  <span className="ico">📍</span>
+                  <span>Unit D 8240-31 St SE</span>
+                </div>
+                <div className="posterContactCity">
+                  Calgary, AB &nbsp;T2C 1H9
+                </div>
+                <div className="posterContactLine" style={{ marginTop: "10px" }}>
+                  <span className="ico">🕐</span>
+                  <span>Mon–Fri 8AM–5:30PM</span>
+                </div>
+                <div className="posterContactCity">
+                  Sat–Sun: By Appointment
+                </div>
+
+                <div className="posterTag">Now Open!</div>
               </div>
             </div>
 
-            {/* small decorative bits (optional style) */}
-            <div className="heroDecor heroDecor1" aria-hidden="true" />
-            <div className="heroDecor heroDecor2" aria-hidden="true" />
+            {/* Headline + CTA + Photo Slot */}
+            <div className="posterBody">
+              <div className="posterCopy">
+                <h1 className="posterHeadline">
+                  Your Trusted Calgary<br />Auto Repair Shop
+                </h1>
+
+                <p className="posterLead">
+                  Family-owned shop. Honest &amp; reliable service.<br />
+                  Done right the first time — guaranteed.
+                </p>
+
+                <div className="posterActions">
+                  <a className="btn btnRed" href="#contact">
+                    Request Appointment
+                  </a>
+                  <a className="btn btnGhost" href="#services">
+                    View Services
+                  </a>
+                </div>
+              </div>
+
+              <div className="posterPhoto">
+                <img
+                  src="/paceshop.png"
+                  alt="P.A.C.E. — Power Automotive Centre of Excellence shop exterior"
+                  className="posterPhotoImg"
+                />
+              </div>
+            </div>
+
+            {/* Feature Strip + Services Link */}
+            <div className="posterBottom">
+              <div className="featureStrip">
+                <div className="featureItem">Family-Owned</div>
+                <div className="featureDot" aria-hidden="true" />
+                <div className="featureItem">Honest Service</div>
+                <div className="featureDot" aria-hidden="true" />
+                <div className="featureItem">Certified Techs</div>
+                <div className="featureDot" aria-hidden="true" />
+                <div className="featureItem">Calgary Local</div>
+              </div>
+
+              <a className="servicesRibbon" href="#services">
+                Our Services
+              </a>
+            </div>
+
           </div>
         </div>
       </section>
 
-      {/* ABOUT */}
+      {/* ─── TRUST STRIP ─── */}
+      <div className="trustStrip" aria-label="At a glance">
+        <div className="container">
+          <div className="trustStripInner">
+            {trustItems.map((t) => (
+              <div className="trustItem" key={t.label}>
+                <span className="trustItemIcon" aria-hidden="true">{t.icon}</span>
+                <span className="trustItemText">
+                  {t.label}
+                  <span className="trustItemScript">{t.script}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── ABOUT ─── */}
       <Section
         id="about"
         title="About P.A.C.E."
-        subtitle="We are a family-owned shop built on trust, quality workmanship, and customer-first service. Established in 2023, we’re focused on doing repairs the right way and building long-term relationships in Calgary."
+        subtitle="A family-owned shop built on trust, quality workmanship, and putting the customer first — every single time. We do repairs the right way and build long-term relationships in Calgary."
       >
         <div className="split">
           <div className="panel">
-            <h3 className="panelTitle">Our Promise</h3>
+            <h3 className="panelTitle">Our Promise to You</h3>
             <ul className="bullets">
-              <li>Honest recommendations and clear communication</li>
+              <li>Honest recommendations and clear communication before any work begins</li>
               <li>Quality repairs using trusted parts and proven processes</li>
-              <li>Efficient service that respects your time</li>
-              <li>A professional, clean shop experience from start to finish</li>
+              <li>Efficient, respectful service that values your time</li>
+              <li>A professional, clean shop experience from drop-off to pick-up</li>
+              <li>Calgary-local — we're your neighbours, not a franchise chain</li>
             </ul>
           </div>
 
           <div className="panel panelAccent">
-            <h3 className="panelTitle">What you can expect</h3>
+            <h3 className="panelTitle">What You Can Expect</h3>
             <div className="stats">
               <div className="stat">
                 <p className="statNum">✔</p>
-                <p className="statText">Straightforward inspections and explanations</p>
+                <p className="statText">Straightforward inspections and plain-language explanations</p>
               </div>
               <div className="stat">
                 <p className="statNum">✔</p>
-                <p className="statText">Approval before any major work begins</p>
+                <p className="statText">Your approval required before any major work starts</p>
               </div>
               <div className="stat">
                 <p className="statNum">✔</p>
-                <p className="statText">Repairs done right the first time</p>
+                <p className="statText">Repairs done right the first time — no runaround</p>
               </div>
               <div className="stat">
                 <p className="statNum">✔</p>
-                <p className="statText">Service you’ll feel confident recommending</p>
+                <p className="statText">Service you'll feel confident recommending to friends and family</p>
               </div>
             </div>
           </div>
         </div>
       </Section>
 
-      {/* GALLERY */}
-      {/* <Section
-        id="gallery"
-        title="Gallery"
-        subtitle="A peek into our shop and the work we’re proud of."
+      {/* ─── SERVICES ─── */}
+      <Section
+        id="services"
+        title="Our Services"
+        subtitle="Core maintenance and repair, done with care and expertise. From an oil change to a full diagnostic — we've got you covered."
       >
-        <div className="galleryGrid">
-          <div className="galleryTile">Photo 1</div>
-          <div className="galleryTile">Photo 2</div>
-          <div className="galleryTile">Photo 3</div>
-          <div className="galleryTile">Photo 4</div>
-        </div>
-        <p className="smallNote">Replace these placeholders with real shop photos later.</p>
-      </Section> */}
-
-      {/* SERVICES */}
-      <Section id="services" title="Services" subtitle="Core maintenance and repair, done with care.">
         <div className="cardsGrid">
-          {[
-            { title: "Oil Change & Maintenance", desc: "Oil changes, fluid checks, filters, and routine maintenance." },
-            { title: "Brakes", desc: "Brake inspections, pads, rotors, calipers, and brake fluid service." },
-            { title: "Tires", desc: "Seasonal tire swaps, tire repair, rotations, and balancing." },
-            { title: "Diagnostics", desc: "Check engine light diagnostics and drivability troubleshooting." },
-            { title: "Battery & Electrical", desc: "Battery testing/replacement, starting/charging concerns, lighting." },
-            { title: "Steering & Suspension", desc: "Shocks, struts, alignment-related concerns, and handling issues." },
-            { title: "Heating & Cooling", desc: "Cooling system service, thermostats, leaks, and overheating concerns." },
-            { title: "General Repair", desc: "Everyday repairs and inspections to keep your vehicle safe and reliable." },
-          ].map((s) => (
+          {services.map((s) => (
             <div className="card" key={s.title}>
               <h3 className="cardTitle">{s.title}</h3>
               <p className="cardDesc">{s.desc}</p>
@@ -131,48 +218,50 @@ export default function App() {
         </div>
       </Section>
 
-      {/* BOOKING */}
-      {/* <Section
-        id="booking"
-        title="Request an Appointment"
-        subtitle="Send us your details and we’ll confirm availability."
+      {/* ─── CONTACT + BOOKING ─── */}
+      <Section
+        id="contact"
+        title="Contact & Appointments"
+        subtitle="Call, email, or fill out the form below to request an appointment or ask any questions."
       >
-        <BookingForm />
-      </Section> */}
-
-      {/* CONTACT */}
-      <Section id="contact" title="Contact" subtitle="Call, email, or send a message anytime.">
-        <div className="contactGrid">
+        {/* Contact + Map row */}
+        <div className="contactGrid" style={{ marginBottom: "28px" }}>
           <div className="contactCard">
             <h3 className="contactTitle">Contact Details</h3>
-            <p className="contactLine">
-              <span>Phone:</span> <a href="tel:+14034534554">(403) 453-4554</a>
-            </p>
-            <p className="contactLine">
-              <span>Email:</span> <a href="mailto:admin@powerautomotive.ca">admin@powerautomotive.ca</a>
-            </p>
-            <p className="contactLine">
-              <span>Hours:</span> Mon–Fri 8am–6pm
-              <br></br><span></span>Sat–Sun By Appointment Only
-            </p>
-            <p className="contactLine">
-              <span>Address:</span> Unit D 8240 31 St SE T2C 1H9, Calgary, AB
-            </p>
+            <div className="contactInfoBlock">
+              <div className="contactLine">
+                <span className="contactLineLabel">Phone</span>
+                <span className="contactLineVal">
+                  <a href="tel:+14034534554">(403) 453-4554</a>
+                </span>
+              </div>
+              <div className="contactLine">
+                <span className="contactLineLabel">Email</span>
+                <span className="contactLineVal">
+                  <a href="mailto:admin@powerautomotive.ca">admin@powerautomotive.ca</a>
+                </span>
+              </div>
+              <div className="contactLine">
+                <span className="contactLineLabel">Hours</span>
+                <span className="contactLineVal">
+                  Mon–Fri 8AM–5:30PM<br />
+                  Sat–Sun: By Appointment Only
+                </span>
+              </div>
+              <div className="contactLine">
+                <span className="contactLineLabel">Address</span>
+                <span className="contactLineVal">
+                  Unit D 8240 31 St SE<br />
+                  Calgary, AB&nbsp;&nbsp;T2C 1H9
+                </span>
+              </div>
+            </div>
 
-            <p className="contactNote">
-              For any questions or inquiries, please email us at{" "}
-              <a href="mailto:admin@powerautomotive.ca">
-                admin@powerautomotive.ca
-              </a>{" "}
-              or call{" "}
-              <a href="tel:14034534554">(403) 453-4554</a>.
-            </p>
-
-
-            {/* <div className="contactBtns">
-              <a className="btn btnPrimary" href="#booking">Book</a>
-              <a className="btn btnGhost" href="tel:+14030000000">Call Now</a>
-            </div> */}
+            <div className="contactNote">
+              For any questions or inquiries, email us at{" "}
+              <a href="mailto:admin@powerautomotive.ca">admin@powerautomotive.ca</a>{" "}
+              or call <a href="tel:14034534554">(403) 453-4554</a> during business hours.
+            </div>
           </div>
 
           <div className="mapCard">
@@ -180,15 +269,17 @@ export default function App() {
               title="P.A.C.E. Location Map"
               src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2511.943579792164!2d-113.99026632224191!3d50.980233471698156!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x53717a06f9d3ada1%3A0x2b41ece6116618d9!2s8240%2031%20St%20SE%20D%2C%20Calgary%2C%20AB%20T2C%201H9!5e0!3m2!1sen!2sca!4v1768685555052!5m2!1sen!2sca"
               width="100%"
-              height="320"
-              style={{ border: 0, borderRadius: "16px" }}
+              height="100%"
+              style={{ border: 0, minHeight: "360px", display: "block" }}
               allowFullScreen=""
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
             />
           </div>
-
         </div>
+
+        {/* Booking Form */}
+        <BookingForm />
       </Section>
 
       <Footer />
