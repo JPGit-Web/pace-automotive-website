@@ -46,7 +46,11 @@
 
 html {
   scroll-behavior: smooth;
-  font-size: 20px;
+  font-size: 20px; /* base for mobile */
+}
+
+@media (min-width: 860px) {
+  html { font-size: 22px; }
 }
 
 body {
@@ -188,7 +192,14 @@ section { scroll-margin-top: 80px; }
 
 @media (max-width: 860px) {
   .navLinksV2 { display: none; }
-  .navInnerV2 { grid-template-columns: 1fr auto; }
+  .navInnerV2 { grid-template-columns: 1fr auto; gap: 10px; }
+}
+
+@media (max-width: 480px) {
+  .navInnerV2 { padding: 8px 0; }
+  .brandTop { font-size: .78rem; letter-spacing: .8px; }
+  .brandBottom { font-size: .88rem; }
+  .navCta { font-size: .78rem; padding: 9px 14px; letter-spacing: 1px; }
 }
 
 /* ─────────────────────────────────────────
@@ -594,11 +605,12 @@ section { scroll-margin-top: 80px; }
   .heroBannerRight span + span::before { margin-right: 18px; }
 }
 
-@media (max-width: 640px) {
-  .heroPoster .container { padding: 0 18px; }
-  .heroBannerLeft { flex: 0 0 50%; }
-  .heroBannerRight { gap: 14px; padding: 10px 16px; }
-  .posterFrame { padding: 22px 0 20px; }
+@media (max-width: 720px) {
+  /* Hide the cramped info banner — contact card below shows same info */
+  .heroBanner { display: none; }
+  .heroPoster .container { padding: 0 16px; }
+  .posterFrame { padding: 20px 0 18px; }
+  .posterContact { width: 100%; }
 }
 
 /* ─────────────────────────────────────────
