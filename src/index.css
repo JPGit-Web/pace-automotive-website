@@ -456,11 +456,17 @@ section { scroll-margin-top: 80px; }
 }
 
 .ico {
-  font-size: .95rem;
-  width: 20px;
+  font-size: 1rem;
+  width: 22px;
   display: inline-flex;
   justify-content: center;
   flex-shrink: 0;
+  color: var(--yellow);
+}
+
+.trustItemIcon i,
+.ico i {
+  font-size: inherit;
 }
 
 .posterContactCity {
@@ -655,8 +661,13 @@ section { scroll-margin-top: 80px; }
 }
 
 .trustItemIcon {
-  font-size: 1.3rem;
+  font-size: 1.4rem;
   line-height: 1;
+  color: var(--yellow);
+  width: 28px;
+  display: inline-flex;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .trustItemText {
@@ -1317,8 +1328,8 @@ section { scroll-margin-top: 80px; }
 }
 
 .footerContactItem .ico {
-  font-size: .9rem;
-  color: rgba(245,243,33,.55);
+  font-size: 1rem;
+  color: rgba(245,243,33,.7);
   flex-shrink: 0;
   margin-top: 2px;
 }

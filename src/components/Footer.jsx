@@ -73,19 +73,20 @@ export default function Footer() {
 
             <div className="footerContactList">
               <div className="footerContactItem">
-                <span className="ico">☎</span>
+                <span className="ico"><i className="fa-solid fa-phone"></i></span>
                 <span>
-                  <a href="tel:+15876792695">(587) 679-2695</a>
+                  Office: <a href="tel:+14034534554">(403) 453-4554</a><br />
+                  Cell: <a href="tel:+15875792695">(587) 579-2695</a>
                 </span>
               </div>
               <div className="footerContactItem">
-                <span className="ico">✉</span>
+                <span className="ico"><i className="fa-solid fa-envelope"></i></span>
                 <span>
                   <a href="mailto:admin@powerautomotive.ca">admin@powerautomotive.ca</a>
                 </span>
               </div>
               <div className="footerContactItem">
-                <span className="ico">📍</span>
+                <span className="ico"><i className="fa-solid fa-location-dot"></i></span>
                 <span>Unit D 8240 31 St SE<br />Calgary, AB &nbsp;T2C 1H9</span>
               </div>
             </div>

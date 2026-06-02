@@ -7,11 +7,11 @@ import Footer from "./components/Footer";
    Trust Strip data
    ───────────────────────────────────────── */
 const trustItems = [
-  { icon: "🏠", label: "Family-Owned", script: "Since Day One" },
-  { icon: "📍", label: "Calgary Based", script: "SE Calgary" },
-  { icon: "🤝", label: "Honest Service", script: "No Surprises" },
-  { icon: "🔧", label: "Certified Techs", script: "Done Right" },
-  { icon: "⭐", label: "Opening Soon", script: "Join Us Early" },
+  { icon: "fa-solid fa-house",      label: "Family-Owned",    script: "Since Day One" },
+  { icon: "fa-solid fa-location-dot", label: "Calgary Based", script: "SE Calgary" },
+  { icon: "fa-solid fa-handshake",  label: "Honest Service",  script: "No Surprises" },
+  { icon: "fa-solid fa-wrench",     label: "Certified Techs", script: "Done Right" },
+  { icon: "fa-solid fa-star",       label: "Now Open!",       script: "Come Visit Us" },
 ];
 
 /* ─────────────────────────────────────────
@@ -42,7 +42,7 @@ export default function App() {
             <span>P.A.C.E. — Power Automotive Centre of Excellence</span>
           </div>
           <div className="heroBannerRight">
-            <span>(587) 679-2695</span>
+            <span>(403) 453-4554</span>
             <span>Unit D 8240-31 St SE, Calgary AB</span>
             <span>Mon–Fri 8AM–5:30PM</span>
           </div>
@@ -65,22 +65,26 @@ export default function App() {
                 <div className="posterContactHeader">Get In Touch</div>
 
                 <div className="posterContactLine">
-                  <span className="ico">☎</span>
-                  <span>(587) 679-2695</span>
+                  <span className="ico"><i className="fa-solid fa-phone"></i></span>
+                  <span>Office: (403) 453-4554</span>
                 </div>
                 <div className="posterContactLine">
-                  <span className="ico">✉</span>
+                  <span className="ico"><i className="fa-solid fa-mobile-screen"></i></span>
+                  <span>Cell: (587) 579-2695</span>
+                </div>
+                <div className="posterContactLine">
+                  <span className="ico"><i className="fa-solid fa-envelope"></i></span>
                   <span>admin@powerautomotive.ca</span>
                 </div>
                 <div className="posterContactLine">
-                  <span className="ico">📍</span>
+                  <span className="ico"><i className="fa-solid fa-location-dot"></i></span>
                   <span>Unit D 8240-31 St SE</span>
                 </div>
                 <div className="posterContactCity">
                   Calgary, AB &nbsp;T2C 1H9
                 </div>
                 <div className="posterContactLine" style={{ marginTop: "10px" }}>
-                  <span className="ico">🕐</span>
+                  <span className="ico"><i className="fa-solid fa-clock"></i></span>
                   <span>Mon–Fri 8AM–5:30PM</span>
                 </div>
                 <div className="posterContactCity">
@@ -149,7 +153,7 @@ export default function App() {
           <div className="trustStripInner">
             {trustItems.map((t) => (
               <div className="trustItem" key={t.label}>
-                <span className="trustItemIcon" aria-hidden="true">{t.icon}</span>
+                <span className="trustItemIcon" aria-hidden="true"><i className={t.icon}></i></span>
                 <span className="trustItemText">
                   {t.label}
                   <span className="trustItemScript">{t.script}</span>
@@ -232,7 +236,8 @@ export default function App() {
               <div className="contactLine">
                 <span className="contactLineLabel">Phone</span>
                 <span className="contactLineVal">
-                  <a href="tel:+15876792695">(587) 679-2695</a>
+                  Office: <a href="tel:+14034534554">(403) 453-4554</a><br />
+                  Cell: <a href="tel:+15875792695">(587) 579-2695</a>
                 </span>
               </div>
               <div className="contactLine">
@@ -260,7 +265,7 @@ export default function App() {
             <div className="contactNote">
               For any questions or inquiries, email us at{" "}
               <a href="mailto:admin@powerautomotive.ca">admin@powerautomotive.ca</a>{" "}
-              or call <a href="tel:+15876792695">(587) 679-2695</a> during business hours.
+              or call <a href="tel:+14034534554">(403) 453-4554</a> during business hours.
             </div>
           </div>
 
