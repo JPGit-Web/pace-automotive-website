@@ -42,7 +42,7 @@ export default function App() {
             <span>P.A.C.E. — Power Automotive Centre of Excellence</span>
           </div>
           <div className="heroBannerRight">
-            <span>(403) 453-4554</span>
+            <span>(587) 679-2695</span>
             <span>Unit D 8240-31 St SE, Calgary AB</span>
             <span>Mon–Fri 8AM–5:30PM</span>
           </div>
@@ -66,7 +66,7 @@ export default function App() {
 
                 <div className="posterContactLine">
                   <span className="ico">☎</span>
-                  <span>(403) 453-4554</span>
+                  <span>(587) 679-2695</span>
                 </div>
                 <div className="posterContactLine">
                   <span className="ico">✉</span>
@@ -232,7 +232,7 @@ export default function App() {
               <div className="contactLine">
                 <span className="contactLineLabel">Phone</span>
                 <span className="contactLineVal">
-                  <a href="tel:+14034534554">(403) 453-4554</a>
+                  <a href="tel:+15876792695">(587) 679-2695</a>
                 </span>
               </div>
               <div className="contactLine">
@@ -260,7 +260,7 @@ export default function App() {
             <div className="contactNote">
               For any questions or inquiries, email us at{" "}
               <a href="mailto:admin@powerautomotive.ca">admin@powerautomotive.ca</a>{" "}
-              or call <a href="tel:14034534554">(403) 453-4554</a> during business hours.
+              or call <a href="tel:+15876792695">(587) 679-2695</a> during business hours.
             </div>
           </div>
 

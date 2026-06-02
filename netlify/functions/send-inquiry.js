@@ -55,7 +55,7 @@ exports.handler = async (event) => {
 
   if (!RESEND_API_KEY) {
     console.error("RESEND_API_KEY environment variable is not set");
-    return { statusCode: 500, body: JSON.stringify({ message: "Email service is not configured. Please call us directly at (403) 453-4554." }) };
+    return { statusCode: 500, body: JSON.stringify({ message: "Email service is not configured. Please call us directly at (587) 679-2695." }) };
   }
 
   /* ─────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ exports.handler = async (event) => {
     <a href="mailto:${email}?subject=Re: Your P.A.C.E. Appointment Request" class="cta">Reply to ${name}</a>
   </div>
   <div class="footer">
-    <p>P.A.C.E. — Power Automotive Centre of Excellence &nbsp;|&nbsp; Unit D 8240-31 St SE, Calgary AB &nbsp;|&nbsp; (403) 453-4554</p>
+    <p>P.A.C.E. — Power Automotive Centre of Excellence &nbsp;|&nbsp; Unit D 8240-31 St SE, Calgary AB &nbsp;|&nbsp; (587) 679-2695</p>
   </div>
 </div>
 </body>
@@ -162,7 +162,7 @@ exports.handler = async (event) => {
     <p>If you need to reach us sooner, please don't hesitate to call or email directly:</p>
     <hr class="divider" />
     <p class="contact">
-      📞 <a href="tel:+14034534554">(403) 453-4554</a><br />
+      📞 <a href="tel:+15876792695">(587) 679-2695</a><br />
       ✉️ <a href="mailto:admin@powerautomotive.ca">admin@powerautomotive.ca</a><br />
       📍 Unit D 8240-31 St SE, Calgary, AB T2C 1H9<br />
       🕐 Mon–Fri 8:00am–6:00pm &nbsp;|&nbsp; Sat–Sun By Appointment
@@ -171,7 +171,7 @@ exports.handler = async (event) => {
     <p>— The P.A.C.E. Team</p>
   </div>
   <div class="footer">
-    <p>P.A.C.E. — Power Automotive Centre of Excellence<br />Unit D 8240-31 St SE, Calgary, AB T2C 1H9 &nbsp;|&nbsp; (403) 453-4554</p>
+    <p>P.A.C.E. — Power Automotive Centre of Excellence<br />Unit D 8240-31 St SE, Calgary, AB T2C 1H9 &nbsp;|&nbsp; (587) 679-2695</p>
     <p style="margin-top:6px;">You're receiving this because you submitted a request at powerautomotive.ca</p>
   </div>
 </div>
@@ -226,7 +226,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 500,
       body: JSON.stringify({
-        message: "We couldn't send your request right now. Please call us at (403) 453-4554 or email admin@powerautomotive.ca directly.",
+        message: "We couldn't send your request right now. Please call us at (587) 679-2695 or email admin@powerautomotive.ca directly.",
       }),
     };
   }

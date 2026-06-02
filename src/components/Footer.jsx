@@ -75,7 +75,7 @@ export default function Footer() {
               <div className="footerContactItem">
                 <span className="ico">☎</span>
                 <span>
-                  <a href="tel:+14034534554">(403) 453-4554</a>
+                  <a href="tel:+15876792695">(587) 679-2695</a>
                 </span>
               </div>
               <div className="footerContactItem">
