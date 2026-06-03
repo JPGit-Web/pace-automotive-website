@@ -397,6 +397,253 @@ export async function convertAppointmentToRepairOrder(appointmentRequestId, {
 }
 
 // ─────────────────────────────────────────────────────────────
+// ESTIMATES
+// ─────────────────────────────────────────────────────────────
+
+const GST_RATE = 0.05; // Alberta GST — 5%
+
+/** Money helper: convert dollar string/number input to integer cents. */
+function dollarsToCents(dollars) {
+  return Math.round((parseFloat(dollars) || 0) * 100);
+}
+
+/** Recalculate and persist estimate subtotal/tax/total from active items. */
+export async function recalculateEstimateTotals(estimateId) {
+  const { data: items } = await supabase
+    .from("estimate_items")
+    .select("line_total_cents, item_type")
+    .eq("estimate_id", estimateId)
+    .eq("is_active", true);
+
+  let subtotal = 0;
+  for (const item of (items || [])) {
+    subtotal += item.item_type === "discount"
+      ? -(item.line_total_cents ?? 0)
+      :  (item.line_total_cents ?? 0);
+  }
+  subtotal = Math.max(0, subtotal);
+  const tax   = Math.round(subtotal * GST_RATE);
+  const total = subtotal + tax;
+
+  const { data, error } = await supabase
+    .from("estimates")
+    .update({ subtotal_cents: subtotal, tax_cents: tax, total_cents: total })
+    .eq("id", estimateId)
+    .select("id, subtotal_cents, tax_cents, total_cents, approved_total_cents")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/** List all estimates with RO, customer, and vehicle joined. */
+export async function listEstimates() {
+  const { data, error } = await supabase
+    .from("estimates")
+    .select(`
+      id, estimate_number, status, subtotal_cents, tax_cents, total_cents,
+      approved_total_cents, created_at, repair_order_id,
+      repair_orders (
+        id, ro_number,
+        customers (first_name, last_name),
+        vehicles   (year, make, model)
+      )
+    `)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Get the most recent estimate for a repair order (null if none).
+ * Repair orders can have multiple estimates; returns the newest.
+ */
+export async function getEstimateByRepairOrder(repairOrderId) {
+  const { data, error } = await supabase
+    .from("estimates")
+    .select("id, estimate_number, status, total_cents")
+    .eq("repair_order_id", repairOrderId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ?? null;
+}
+
+/**
+ * Get full estimate detail with active items and RO/customer/vehicle context.
+ * Uses separate queries to avoid PostgREST join ambiguity.
+ */
+export async function getEstimate(estimateId) {
+  const { data: est, error } = await supabase
+    .from("estimates").select("*").eq("id", estimateId).single();
+  if (error) throw error;
+
+  const { data: items } = await supabase
+    .from("estimate_items").select("*")
+    .eq("estimate_id", estimateId).eq("is_active", true)
+    .order("sort_order", { ascending: true });
+
+  let ro = null, customer = null, vehicle = null;
+  if (est.repair_order_id) {
+    const { data: roData } = await supabase
+      .from("repair_orders").select("id, ro_number, customer_id, vehicle_id")
+      .eq("id", est.repair_order_id).single();
+    ro = roData;
+    if (ro?.customer_id) {
+      const { data } = await supabase.from("customers")
+        .select("id, first_name, last_name, email, phone").eq("id", ro.customer_id).single();
+      customer = data;
+    }
+    if (ro?.vehicle_id) {
+      const { data } = await supabase.from("vehicles")
+        .select("id, year, make, model").eq("id", ro.vehicle_id).single();
+      vehicle = data;
+    }
+  }
+
+  return { ...est, items: items || [], ro, customer, vehicle };
+}
+
+/** Create a draft estimate for a repair order. */
+export async function createEstimateForRepairOrder(repairOrderId, { title, customerMessage } = {}) {
+  const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+  const roRes = await supabase.from("repair_orders")
+    .select("ro_number").eq("id", repairOrderId).single();
+  const roNumber = roRes.data?.ro_number ?? "";
+
+  const { data, error } = await supabase
+    .from("estimates")
+    .insert([{
+      repair_order_id:  repairOrderId,
+      title:            title || `Estimate for ${roNumber}`,
+      customer_message: customerMessage || null,
+      status:           "draft",
+      created_by:       session?.user?.id ?? null,
+    }])
+    .select()
+    .single();
+
+  if (error) {
+    if (import.meta.env.DEV) console.error("[createEstimateForRepairOrder]", error);
+    throw error;
+  }
+  return data;
+}
+
+/** Update estimate meta fields (title, customer_message, expires_at). */
+export async function updateEstimate(estimateId, fields) {
+  const ALLOWED = ["title","customer_message","status","sent_at","approved_at","declined_at","expires_at","approved_total_cents"];
+  const payload = {};
+  for (const k of ALLOWED) if (k in fields) payload[k] = fields[k] ?? null;
+
+  const { data, error } = await supabase
+    .from("estimates").update(payload).eq("id", estimateId).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/** Update estimate status and set relevant timestamps. */
+export async function updateEstimateStatus(estimateId, newStatus) {
+  const now = new Date().toISOString();
+  const extra = {};
+  if (newStatus === "sent")     extra.sent_at     = now;
+  if (newStatus === "approved") extra.approved_at = now;
+  if (newStatus === "declined") extra.declined_at = now;
+
+  return updateEstimate(estimateId, { status: newStatus, ...extra });
+}
+
+/** List all active estimate items for an estimate. */
+export async function listEstimateItems(estimateId) {
+  const { data, error } = await supabase
+    .from("estimate_items").select("*")
+    .eq("estimate_id", estimateId).eq("is_active", true)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Create a new estimate line item.
+ * Accepts unit_price in dollars; converts to cents before storing.
+ */
+export async function createEstimateItem(estimateId, repairOrderId, itemData) {
+  const qty       = Math.max(0, parseFloat(itemData.quantity) || 0);
+  const unitCents = dollarsToCents(itemData.unit_price_dollars ?? itemData.unit_price_cents / 100 ?? 0);
+  const lineCents = Math.round(qty * unitCents);
+
+  const { data, error } = await supabase
+    .from("estimate_items")
+    .insert([{
+      estimate_id:         estimateId,
+      repair_order_id:     repairOrderId,
+      item_type:           itemData.item_type     ?? "labor",
+      description:         itemData.description,
+      quantity:            qty,
+      unit_price_cents:    unitCents,
+      line_total_cents:    lineCents,
+      is_required:         itemData.is_required         ?? false,
+      is_customer_visible: itemData.is_customer_visible ?? true,
+      notes:               itemData.notes               || null,
+      sort_order:          itemData.sort_order          ?? 0,
+      is_active:           true,
+    }])
+    .select().single();
+
+  if (error) {
+    if (import.meta.env.DEV) console.error("[createEstimateItem]", error);
+    throw error;
+  }
+
+  await recalculateEstimateTotals(estimateId).catch(() => {});
+  return data;
+}
+
+/**
+ * Update an estimate line item. Recalculates line_total_cents from qty × unit_price.
+ * Accepts unit_price in dollars via unit_price_dollars, or raw cents via unit_price_cents.
+ */
+export async function updateEstimateItem(itemId, estimateId, itemData) {
+  const ALLOWED = ["item_type","description","quantity","unit_price_cents","is_required",
+                   "is_customer_visible","notes","approval_status","sort_order"];
+  const payload = {};
+  for (const k of ALLOWED) if (k in itemData) payload[k] = itemData[k] ?? null;
+
+  // If caller passed dollars, convert
+  if ("unit_price_dollars" in itemData) {
+    payload.unit_price_cents = dollarsToCents(itemData.unit_price_dollars);
+  }
+
+  // Recalculate line total
+  const qty       = parseFloat(payload.quantity        ?? itemData.quantity)        ?? 1;
+  const unitCents = parseInt(payload.unit_price_cents ?? itemData.unit_price_cents) ?? 0;
+  payload.line_total_cents = Math.round(Math.max(0, qty) * Math.max(0, unitCents));
+
+  const { data, error } = await supabase
+    .from("estimate_items").update(payload).eq("id", itemId).select().single();
+
+  if (error) {
+    if (import.meta.env.DEV) console.error("[updateEstimateItem]", error);
+    throw error;
+  }
+
+  await recalculateEstimateTotals(estimateId).catch(() => {});
+  return data;
+}
+
+/** Soft-hide an estimate item (is_active = false). Recalculates totals. */
+export async function softHideEstimateItem(itemId, estimateId) {
+  const { data, error } = await supabase
+    .from("estimate_items").update({ is_active: false }).eq("id", itemId).select().single();
+  if (error) throw error;
+  await recalculateEstimateTotals(estimateId).catch(() => {});
+  return data;
+}
+
+// ─────────────────────────────────────────────────────────────
 // INSPECTIONS
 // ─────────────────────────────────────────────────────────────
 

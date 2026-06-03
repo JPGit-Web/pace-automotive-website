@@ -15,6 +15,7 @@ All migrations are run manually in the Supabase SQL Editor.
 | `003_repair_orders.sql` | Phase 6A | `repair_orders`, RO number sequence, FK from `appointment_requests` |
 | `003b_repair_order_sequence_grants.sql` | Phase 6B | sequence grants for `repair_order_number_seq` |
 | `004_inspections.sql` | Phase 7A | `inspections`, `inspection_items`, `inspection_photos`, `inspection-photos` storage bucket |
+| `005_estimates.sql` | Phase 8A | `estimates`, `estimate_items`, `approval_tokens`, `estimate_number_seq` |
 
 ---
 
@@ -34,6 +35,80 @@ All migrations are run manually in the Supabase SQL Editor.
 ## After Running Each Migration — Verify in Table Editor
 
 Go to **Table Editor** in the Supabase left sidebar and confirm:
+
+### After `005_estimates.sql`
+
+**Tables (Table Editor):**
+- [ ] `estimates` table exists with all columns
+- [ ] `estimate_items` table exists with all columns
+- [ ] `approval_tokens` table exists with all columns
+
+**Sequence (Database → Sequences):**
+- [ ] `estimate_number_seq` exists
+
+**RLS (lock icon in Table Editor or Authentication → Policies):**
+- [ ] RLS enabled on `estimates`
+- [ ] RLS enabled on `estimate_items`
+- [ ] RLS enabled on `approval_tokens`
+
+**Policies (Authentication → Policies):**
+- [ ] `est: authenticated users can select`
+- [ ] `est: authenticated users can insert`
+- [ ] `est: authenticated users can update`
+- [ ] `est_items: authenticated users can select`
+- [ ] `est_items: authenticated users can insert`
+- [ ] `est_items: authenticated users can update`
+- [ ] `approval_tokens: authenticated users can select`
+- [ ] `approval_tokens: authenticated users can insert`
+- [ ] `approval_tokens: authenticated users can update`
+- [ ] No DELETE policies on any table
+- [ ] No anon policies on any table (including approval_tokens)
+
+**Triggers (Database → Triggers):**
+- [ ] `trg_estimates_updated_at` on `estimates`
+- [ ] `trg_estimate_items_updated_at` on `estimate_items`
+- [ ] No trigger on `approval_tokens` (no updated_at column)
+
+**Indexes (Database → Indexes):**
+- [ ] `idx_estimates_repair_order_id`
+- [ ] `idx_estimates_estimate_number`
+- [ ] `idx_estimates_status`
+- [ ] `idx_estimates_created_at`
+- [ ] `idx_estimates_expires_at`
+- [ ] `idx_est_items_estimate_id`
+- [ ] `idx_est_items_repair_order_id`
+- [ ] `idx_est_items_inspection_item_id`
+- [ ] `idx_est_items_approval_status`
+- [ ] `idx_est_items_is_active`
+- [ ] `idx_est_items_sort_order`
+- [ ] `idx_approval_tokens_estimate_id`
+- [ ] `idx_approval_tokens_repair_order_id`
+- [ ] `idx_approval_tokens_token_hash`
+- [ ] `idx_approval_tokens_expires_at`
+- [ ] `idx_approval_tokens_used_at`
+- [ ] `idx_approval_tokens_revoked_at`
+
+**Verify estimate number format (SQL Editor):**
+```sql
+select
+  'EST-' || to_char(now(), 'YYYY') || '-' || lpad(nextval('estimate_number_seq')::text, 4, '0')
+  as next_estimate_number;
+```
+Expected result: `EST-2026-0001` (or similar).
+
+**Verify no anon access (SQL Editor):**
+```sql
+select grantee, table_name, privilege_type
+from information_schema.role_table_grants
+where table_name in ('estimates', 'estimate_items', 'approval_tokens')
+  and grantee = 'anon';
+```
+Expected: zero rows.
+
+**Confirm token_hash design:**
+The `approval_tokens` table has a `token_hash` column (not a `token` column). Raw tokens are never stored in the database — only their SHA-256 hash. This is intentional.
+
+---
 
 ### After `004_inspections.sql`
 

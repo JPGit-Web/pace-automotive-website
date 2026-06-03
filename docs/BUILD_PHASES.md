@@ -370,13 +370,13 @@ Each phase is designed to be self-contained and deployable. The public website i
 | Phase | Feature | Status |
 |---|---|---|
 | 0 | Planning documentation | ✅ Complete |
-| 1 | Routing foundation | ⬜ Not started |
-| 2 | Portal UI shell | ⬜ Not started |
-| 3 | Supabase + real auth | ⬜ Not started |
-| 4 | Customers + vehicles | ⬜ Not started |
-| 5 | Appointment requests | ⬜ Not started |
-| 6 | Repair orders | ⬜ Not started |
-| 7 | Inspections + photos | ⬜ Not started |
+| 1 | Routing foundation | ✅ Complete |
+| 2 | Portal UI shell | ✅ Complete |
+| 3 | Supabase + real auth | ✅ Complete |
+| 4 | Customers + vehicles | ✅ Complete |
+| 5 | Appointment requests | ✅ Complete |
+| 6 | Repair orders | ✅ Complete |
+| 7 | Inspections + photos | ✅ Complete |
 | 8 | Estimates + approval links | ⬜ Not started |
 | 9 | Helcim invoice (manual) | ⬜ Not started |
 | 10 | Helcim webhook (auto) | ⬜ Not started |

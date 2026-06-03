@@ -6,6 +6,7 @@ import {
   updateRepairOrder, updateRepairOrderStatus,
   listCustomers, listVehiclesByCustomer, logActivity,
   getInspectionByRepairOrder, createInspectionForRepairOrder, createDefaultInspectionItems,
+  getEstimateByRepairOrder, createEstimateForRepairOrder,
 } from "../../lib/portalData";
 
 /* ── Constants ─────────────────────────────────────────────── */
@@ -121,6 +122,9 @@ export default function PortalRepairOrders() {
   // Inspection state for current RO
   const [roInspection,    setRoInspection]    = useState(null);
   const [inspLoading,     setInspLoading]     = useState(false);
+  // Estimate state for current RO
+  const [roEstimate,      setRoEstimate]      = useState(null);
+  const [estLoading,      setEstLoading]      = useState(false);
   const navigate = useNavigate();
 
   /* ── Load repair orders ── */
@@ -138,18 +142,39 @@ export default function PortalRepairOrders() {
     setSelected(ro);
     setDetailLoading(true);
     setRoInspection(null);
+    setRoEstimate(null);
     try {
-      const [detail, insp] = await Promise.all([
+      const [detail, insp, est] = await Promise.all([
         getRepairOrder(ro.id),
         getInspectionByRepairOrder(ro.id).catch(() => null),
+        getEstimateByRepairOrder(ro.id).catch(() => null),
       ]);
       setDetailData(detail);
       setRoInspection(insp);
+      setRoEstimate(est);
     } catch (err) {
       if (import.meta.env.DEV) console.error("[PortalRepairOrders] detail load failed:", err);
       setDetailData(null);
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  /* ── Create estimate ── */
+  async function handleCreateEstimate() {
+    if (!selected) return;
+    setEstLoading(true);
+    try {
+      const est = await createEstimateForRepairOrder(selected.id);
+      await logActivity("estimate.created", "estimate", est.id, {
+        estimate_number: est.estimate_number, ro_number: selected.ro_number,
+      });
+      setRoEstimate(est);
+      navigate("/portal/estimates", { state: { estimateId: est.id } });
+    } catch {
+      alert("Failed to create estimate. Please try again.");
+    } finally {
+      setEstLoading(false);
     }
   }
 
@@ -545,10 +570,19 @@ export default function PortalRepairOrders() {
                     {inspLoading ? " Starting…" : " Start Inspection"}
                   </button>
                 )}
-                <button className="portalBtn portalBtnSecondary" disabled title="Coming in Phase 8">
-                  <i className="fa-solid fa-file-invoice-dollar"></i> Create Estimate
-                  <span style={{ fontSize:".7rem", marginLeft:6, opacity:.6 }}>Phase 8</span>
-                </button>
+                {roEstimate ? (
+                  <button className="portalBtn portalBtnPrimary"
+                    onClick={() => navigate("/portal/estimates", { state: { estimateId: roEstimate.id } })}>
+                    <i className="fa-solid fa-file-invoice-dollar"></i> View Estimate
+                  </button>
+                ) : (
+                  <button className="portalBtn portalBtnSecondary"
+                    onClick={handleCreateEstimate}
+                    disabled={estLoading || selected?.status === "cancelled"}>
+                    <i className="fa-solid fa-file-invoice-dollar"></i>
+                    {estLoading ? " Creating…" : " Create Estimate"}
+                  </button>
+                )}
                 <button className="portalBtn portalBtnSecondary" disabled title="Coming in Phase 9">
                   <i className="fa-solid fa-receipt"></i> Link Invoice
                   <span style={{ fontSize:".7rem", marginLeft:6, opacity:.6 }}>Phase 9</span>

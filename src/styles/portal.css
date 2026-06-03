@@ -1674,3 +1674,105 @@
   .portalInspItemNotes { grid-template-columns: 1fr; }
   .portalInspItemTop   { flex-direction: column; align-items: flex-start; }
 }
+
+/* ============================================================
+   ESTIMATE BUILDER
+   ============================================================ */
+
+/* ── Item type badges ── */
+.portalTypeBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  white-space: nowrap;
+}
+.portalTypeBadge.labor        { background: var(--p-info-bg);    color: var(--p-info); }
+.portalTypeBadge.part         { background: #f0f0f5;             color: #5a6478; }
+.portalTypeBadge.shop-supply  { background: #e0f5f1;             color: #0f766e; }
+.portalTypeBadge.fee          { background: #f3e8ff;             color: #6b21a8; }
+.portalTypeBadge.discount     { background: var(--p-warning-bg); color: var(--p-warning); }
+.portalTypeBadge.other        { background: #f4f4f6;             color: #888; }
+
+/* ── Estimate-specific status badges ── */
+.portalBadge.sent              { background: var(--p-info-bg);    color: var(--p-info); }
+.portalBadge.partially-approved{ background: #fff8e6;             color: #92610a; }
+.portalBadge.expired           { background: var(--p-danger-bg);  color: var(--p-danger); }
+
+/* ── Totals box ── */
+.portalEstTotals {
+  background: var(--p-navy);
+  color: var(--p-paper);
+  border-radius: var(--p-radius);
+  padding: 20px 24px;
+  margin-top: 20px;
+  min-width: 280px;
+}
+
+.portalEstTotalRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: .88rem;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.portalEstTotalRow:last-child { border-bottom: none; }
+
+.portalEstTotalLabel { color: rgba(244,236,216,.7); }
+.portalEstTotalValue { font-weight: 600; font-family: monospace; font-size: .92rem; }
+
+.portalEstGrandTotal {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0 4px;
+  margin-top: 4px;
+  border-top: 1px solid rgba(255,255,255,.2);
+}
+.portalEstGrandTotal .portalEstTotalLabel { color: var(--p-paper); font-weight: 700; font-size: 1rem; }
+.portalEstGrandTotal .portalEstTotalValue { color: var(--p-yellow); font-size: 1.2rem; font-weight: 800; }
+
+.portalEstApprovedRow .portalEstTotalLabel { color: rgba(244,236,216,.6); font-style: italic; }
+.portalEstApprovedRow .portalEstTotalValue { color: var(--p-success-bg); font-size: .88rem; }
+
+/* ── Line items table ── */
+.portalEstItemTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .85rem;
+}
+.portalEstItemTable th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--p-text-3);
+  border-bottom: 2px solid var(--p-border);
+  white-space: nowrap;
+}
+.portalEstItemTable td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--p-border);
+  vertical-align: middle;
+  color: var(--p-text);
+}
+.portalEstItemTable tr:last-child td { border-bottom: none; }
+.portalEstItemTable tr:hover td { background: #fafbfc; }
+.portalEstItemTable td.money { font-family: monospace; text-align: right; white-space: nowrap; }
+.portalEstItemTable th.money { text-align: right; }
+
+/* ── Estimate meta fields ── */
+.portalEstMetaGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+@media (max-width: 640px) { .portalEstMetaGrid { grid-template-columns: 1fr; } }
