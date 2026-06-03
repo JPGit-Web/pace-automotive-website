@@ -10,6 +10,9 @@ All migrations are run manually in the Supabase SQL Editor.
 | File | Phase | Tables Created |
 |---|---|---|
 | `001_customers_vehicles.sql` | Phase 4A | `customers`, `vehicles`, `activity_logs` |
+| `002_appointment_requests.sql` | Phase 5A | `appointment_requests` |
+| `002b_service_role_grants.sql` | Phase 5B | service_role grants for `appointment_requests` |
+| `003_repair_orders.sql` | Phase 6A | `repair_orders`, RO number sequence, FK from `appointment_requests` |
 
 ---
 
@@ -29,6 +32,111 @@ All migrations are run manually in the Supabase SQL Editor.
 ## After Running Each Migration — Verify in Table Editor
 
 Go to **Table Editor** in the Supabase left sidebar and confirm:
+
+### After `003_repair_orders.sql`
+
+- [ ] `repair_orders` table exists with all columns
+
+**Verify RO Number Sequence (Database → Sequences):**
+- [ ] `repair_order_number_seq` exists
+
+**Verify Trigger (Database → Triggers):**
+- [ ] `trg_repair_orders_updated_at` exists on `repair_orders`
+
+**Verify Indexes (Database → Indexes):**
+- [ ] `idx_ro_ro_number`
+- [ ] `idx_ro_customer_id`
+- [ ] `idx_ro_vehicle_id`
+- [ ] `idx_ro_appointment_request_id`
+- [ ] `idx_ro_status`
+- [ ] `idx_ro_payment_status`
+- [ ] `idx_ro_created_at`
+- [ ] `idx_ro_promised_date`
+
+**Verify Policies (Authentication → Policies):**
+- [ ] `ro: authenticated users can select`
+- [ ] `ro: authenticated users can insert`
+- [ ] `ro: authenticated users can update`
+- [ ] No DELETE policy exists
+- [ ] No anon/public policy exists
+
+**Verify RLS (Table Editor — lock icon):**
+- [ ] RLS is enabled on `repair_orders`
+
+**Verify FK on appointment_requests (Database → Tables → appointment_requests → Foreign Keys):**
+- [ ] `appt_repair_order_id_fk` constraint exists linking `appointment_requests.repair_order_id` → `repair_orders.id`
+
+**Verify RO number generation (SQL Editor):**
+
+Run this to create a test row and confirm the RO number format:
+```sql
+-- Quick test — requires an existing customer and vehicle uuid
+-- Replace the UUIDs with real IDs from your customers and vehicles tables
+-- DELETE this test row after confirming:
+-- DELETE FROM repair_orders WHERE internal_notes = 'migration test row';
+
+-- To just check the sequence and number format without a real row:
+select
+  'RO-' || to_char(now(), 'YYYY') || '-' || lpad(nextval('repair_order_number_seq')::text, 4, '0')
+  as next_ro_number;
+```
+Expected result: `RO-2026-0001` (or similar, depending on how many times the sequence has fired).
+
+**Verify grants (SQL Editor):**
+```sql
+select grantee, privilege_type
+from information_schema.role_table_grants
+where table_name = 'repair_orders'
+order by grantee, privilege_type;
+```
+Expected: `authenticated` has SELECT, INSERT, UPDATE. `anon` has no rows.
+
+---
+
+### After `002b_service_role_grants.sql`
+
+- [ ] `service_role` can insert into `appointment_requests`
+- [ ] Public booking form submissions appear in Supabase after running `npx netlify dev`
+
+---
+
+### After `002_appointment_requests.sql`
+
+- [ ] `appointment_requests` table exists with all columns
+- [ ] RLS is enabled on `appointment_requests` (lock icon visible in Table Editor)
+
+**Verify Policies (Authentication → Policies):**
+- [ ] `appt: authenticated users can select`
+- [ ] `appt: authenticated users can insert`
+- [ ] `appt: authenticated users can update`
+- [ ] No DELETE policy exists
+- [ ] No anon/public policy exists
+
+**Verify Trigger (Database → Triggers):**
+- [ ] `trg_appt_updated_at` exists on `appointment_requests`
+
+**Verify Indexes (Database → Indexes):**
+- [ ] `idx_appt_status`
+- [ ] `idx_appt_source`
+- [ ] `idx_appt_created_at`
+- [ ] `idx_appt_customer_id`
+- [ ] `idx_appt_vehicle_id`
+- [ ] `idx_appt_phone`
+- [ ] `idx_appt_email`
+
+**Verify Grants (Database → Roles or SQL check):**
+
+Run this in SQL Editor to confirm grants and revokes:
+```sql
+-- Should return rows for authenticated with select/insert/update
+select grantee, privilege_type
+from information_schema.role_table_grants
+where table_name = 'appointment_requests'
+order by grantee, privilege_type;
+```
+Expected: `authenticated` has SELECT, INSERT, UPDATE. `anon` has no rows.
+
+---
 
 ### After `001_customers_vehicles.sql`
 

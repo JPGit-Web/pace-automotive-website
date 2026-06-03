@@ -1,0 +1,37 @@
+-- =============================================================================
+-- P.A.C.E. — Power Automotive Centre of Excellence
+-- Migration 003b: Repair Order Sequence Grants
+-- =============================================================================
+--
+-- PURPOSE:
+--   Grants the authenticated role permission to use the repair order number
+--   sequence so staff can insert new repair orders through the portal.
+--
+-- WHY THIS IS NEEDED:
+--   The repair_orders.ro_number column uses a DEFAULT expression that calls
+--   nextval('repair_order_number_seq') to auto-generate human-readable RO
+--   numbers (e.g. RO-2026-0001). When an authenticated staff user inserts a
+--   row, Postgres fires that DEFAULT, which internally calls nextval().
+--   Without USAGE and SELECT on the sequence itself, Postgres raises a
+--   permission denied error even though the authenticated role has INSERT
+--   permission on the repair_orders table.
+--
+-- DEPENDS ON:
+--   Migration 003_repair_orders.sql must be run first.
+--   The sequence repair_order_number_seq must already exist.
+--
+-- HOW TO RUN:
+--   1. Open the Supabase dashboard → SQL Editor → New query.
+--   2. Paste the entire contents of this file and click Run.
+--   3. Confirm by creating a test repair order in the portal — the RO
+--      number should auto-generate without permission errors.
+--
+-- SAFE TO RE-RUN:
+--   GRANT is idempotent — re-running will not cause errors.
+-- =============================================================================
+
+
+-- Allow authenticated staff to advance the sequence (USAGE) and read its
+-- current value (SELECT). Both are required for nextval() to work during
+-- an authenticated INSERT on repair_orders.
+grant usage, select on sequence public.repair_order_number_seq to authenticated;

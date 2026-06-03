@@ -16,7 +16,7 @@ const safe = (str = "") =>
  */
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   // Only accept POST
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: JSON.stringify({ message: "Method not allowed" }) };
@@ -52,6 +52,87 @@ exports.handler = async (event) => {
   const BUSINESS_EMAIL     = process.env.BUSINESS_EMAIL || "admin@powerautomotive.ca";
   const FROM_EMAIL         = process.env.FROM_EMAIL     || "noreply@powerautomotive.ca";
   const FROM_NAME          = process.env.FROM_NAME      || "P.A.C.E. Website";
+
+  // Supabase server-side vars — only used in this Netlify Function, never in src/
+  // SUPABASE_URL falls back to VITE_SUPABASE_URL for local dev convenience
+  // (Netlify Dev injects all .env.local vars, including VITE_ prefixed ones)
+  const SUPABASE_URL      = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const SUPABASE_SRK      = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  /* ─────────────────────────────────────────────────────────
+     STEP 1: Save appointment request to Supabase
+     Non-fatal — email still sends even if database write fails.
+     ───────────────────────────────────────────────────────── */
+  if (SUPABASE_URL && SUPABASE_SRK) {
+    try {
+      const row = {
+        source:            "web_form",
+        name:              name  || null,
+        phone:             phone || null,
+        email:             email || null,
+        vehicle_info:      vehicle   || null,
+        service_requested: service   || null,
+        preferred_date:    preferred || null,
+        notes:             message   || null,
+        status:            "pending",
+      };
+
+      // sb_secret_... keys are NOT JWTs — do not send as Bearer.
+      // Use apikey header only. If the key starts with "eyJ" it is a legacy
+      // service_role JWT and also needs Authorization: Bearer.
+      const isJwt = SUPABASE_SRK.startsWith("eyJ");
+      const dbHeaders = {
+        "apikey":       SUPABASE_SRK,
+        "Content-Type": "application/json",
+        "Prefer":       "return=representation",
+      };
+      if (isJwt) dbHeaders["Authorization"] = `Bearer ${SUPABASE_SRK}`;
+
+      const sanitizedRow = {
+        source:            row.source,
+        name:              row.name,
+        phone:             row.phone ? "***" : null,
+        email:             row.email ? row.email.replace(/(.{2}).+(@.+)/, "$1***$2") : null,
+        vehicle_info:      row.vehicle_info,
+        service_requested: row.service_requested,
+        preferred_date:    row.preferred_date,
+        status:            row.status,
+      };
+
+      const dbRes = await fetch(`${SUPABASE_URL}/rest/v1/appointment_requests`, {
+        method:  "POST",
+        headers: dbHeaders,
+        body:    JSON.stringify(row),
+      });
+
+      if (!dbRes.ok) {
+        let errDetail = "(unreadable)";
+        try {
+          const errJson = await dbRes.json();
+          errDetail = JSON.stringify(errJson);
+        } catch {
+          errDetail = await dbRes.text().catch(() => "(unreadable)");
+        }
+        console.error(
+          "[send-inquiry] Supabase insert failed:",
+          dbRes.status, dbRes.statusText,
+          "| error:", errDetail,
+          "| row (sanitized):", JSON.stringify(sanitizedRow)
+        );
+        // Non-fatal — continue to email sending
+      } else {
+        console.log("[send-inquiry] Supabase insert succeeded:", dbRes.status);
+      }
+    } catch (dbErr) {
+      console.error("[send-inquiry] Supabase insert threw:", dbErr.message);
+      // Non-fatal — continue to email sending
+    }
+  } else {
+    console.warn(
+      "[send-inquiry] Supabase not configured — skipping database save.\n" +
+      "  Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Netlify env vars."
+    );
+  }
 
   if (!RESEND_API_KEY) {
     console.error("RESEND_API_KEY environment variable is not set");

@@ -4,12 +4,22 @@
   functions = "netlify/functions"
 
 [dev]
-  command     = "vite"
-  port        = 8888
-  targetPort  = 5173
-  autoLaunch  = false
+  # "vite" runs the Vite dev server as the framework subprocess.
+  # Netlify Dev listens on port 8888 and proxies to Vite on port 5173.
+  # framework = "#custom" tells Netlify Dev to bypass its own redirect
+  # middleware for proxied requests so Vite paths like /@vite/client and
+  # /src/main.jsx are served as JS modules instead of being rewritten to
+  # /index.html by the SPA fallback rule below.
+  command    = "vite"
+  framework  = "#custom"
+  targetPort = 5173
+  port       = 8888
+  publish    = "dist"
+  autoLaunch = false
 
-# SPA fallback — all non-asset routes serve index.html
+# SPA fallback — applies in production only (Netlify CDN).
+# All routes without a matching file in dist/ serve index.html so
+# React Router can handle client-side navigation.
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
