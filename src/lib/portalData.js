@@ -397,6 +397,319 @@ export async function convertAppointmentToRepairOrder(appointmentRequestId, {
 }
 
 // ─────────────────────────────────────────────────────────────
+// INSPECTIONS
+// ─────────────────────────────────────────────────────────────
+
+const ALLOWED_PHOTO_TYPES = ["image/jpeg","image/png","image/webp","image/heic","image/heif"];
+const MAX_PHOTO_BYTES = 52428800; // 50 MB
+
+const DEFAULT_INSPECTION_ITEMS = [
+  // Tires & Wheels
+  { category:"Tires & Wheels", item_name:"Front Left Tire",       sort_order:10 },
+  { category:"Tires & Wheels", item_name:"Front Right Tire",      sort_order:20 },
+  { category:"Tires & Wheels", item_name:"Rear Left Tire",        sort_order:30 },
+  { category:"Tires & Wheels", item_name:"Rear Right Tire",       sort_order:40 },
+  { category:"Tires & Wheels", item_name:"Tire Pressure",         sort_order:50 },
+  { category:"Tires & Wheels", item_name:"Wheel Nuts / Lug Nuts", sort_order:60 },
+  // Brakes
+  { category:"Brakes", item_name:"Front Brake Pads", sort_order:10 },
+  { category:"Brakes", item_name:"Rear Brake Pads",  sort_order:20 },
+  { category:"Brakes", item_name:"Brake Rotors",     sort_order:30 },
+  { category:"Brakes", item_name:"Brake Fluid",      sort_order:40 },
+  // Fluids
+  { category:"Fluids", item_name:"Engine Oil",             sort_order:10 },
+  { category:"Fluids", item_name:"Coolant",                sort_order:20 },
+  { category:"Fluids", item_name:"Transmission Fluid",     sort_order:30 },
+  { category:"Fluids", item_name:"Washer Fluid",           sort_order:40 },
+  { category:"Fluids", item_name:"Power Steering Fluid",   sort_order:50 },
+  // Lights
+  { category:"Lights", item_name:"Headlights",    sort_order:10 },
+  { category:"Lights", item_name:"Brake Lights",  sort_order:20 },
+  { category:"Lights", item_name:"Turn Signals",  sort_order:30 },
+  { category:"Lights", item_name:"Reverse Lights",sort_order:40 },
+  // Engine Bay
+  { category:"Engine Bay", item_name:"Battery",    sort_order:10 },
+  { category:"Engine Bay", item_name:"Belts",      sort_order:20 },
+  { category:"Engine Bay", item_name:"Hoses",      sort_order:30 },
+  { category:"Engine Bay", item_name:"Air Filter", sort_order:40 },
+  // Suspension & Steering
+  { category:"Suspension & Steering", item_name:"Shocks / Struts", sort_order:10 },
+  { category:"Suspension & Steering", item_name:"Ball Joints",     sort_order:20 },
+  { category:"Suspension & Steering", item_name:"Tie Rods",        sort_order:30 },
+  // Under Vehicle
+  { category:"Under Vehicle", item_name:"Exhaust System",   sort_order:10 },
+  { category:"Under Vehicle", item_name:"Leaks",            sort_order:20 },
+  { category:"Under Vehicle", item_name:"Rust / Corrosion", sort_order:30 },
+  // Other
+  { category:"Other", item_name:"Wipers",           sort_order:10 },
+  { category:"Other", item_name:"Cabin Air Filter", sort_order:20 },
+  { category:"Other", item_name:"Road Test Notes",  sort_order:30 },
+];
+
+/** List all inspections with RO, customer, and vehicle joined. */
+export async function listInspections() {
+  const { data, error } = await supabase
+    .from("inspections")
+    .select(`
+      id, status, completed_at, sent_to_customer_at, created_at, repair_order_id,
+      repair_orders (
+        id, ro_number,
+        customers (first_name, last_name),
+        vehicles   (year, make, model)
+      )
+    `)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Get a single inspection's full detail: record + items.
+ * RO/customer/vehicle info fetched separately to avoid PostgREST join ambiguity.
+ */
+export async function getInspection(inspectionId) {
+  const { data: insp, error: inspErr } = await supabase
+    .from("inspections").select("*").eq("id", inspectionId).single();
+  if (inspErr) throw inspErr;
+
+  const { data: items } = await supabase
+    .from("inspection_items").select("*")
+    .eq("inspection_id", inspectionId)
+    .order("sort_order", { ascending: true });
+
+  let ro = null, customer = null, vehicle = null;
+  if (insp.repair_order_id) {
+    const { data: roData } = await supabase
+      .from("repair_orders").select("id, ro_number, customer_id, vehicle_id")
+      .eq("id", insp.repair_order_id).single();
+    ro = roData;
+    if (ro?.customer_id) {
+      const { data } = await supabase.from("customers")
+        .select("id, first_name, last_name").eq("id", ro.customer_id).single();
+      customer = data;
+    }
+    if (ro?.vehicle_id) {
+      const { data } = await supabase.from("vehicles")
+        .select("id, year, make, model").eq("id", ro.vehicle_id).single();
+      vehicle = data;
+    }
+  }
+
+  return { ...insp, items: items || [], ro, customer, vehicle };
+}
+
+/**
+ * Check if a repair order already has an inspection.
+ * Returns null if not found (PGRST116 = no rows).
+ */
+export async function getInspectionByRepairOrder(repairOrderId) {
+  const { data, error } = await supabase
+    .from("inspections")
+    .select("id, status, completed_at")
+    .eq("repair_order_id", repairOrderId)
+    .single();
+
+  if (error && error.code === "PGRST116") return null;
+  if (error) throw error;
+  return data;
+}
+
+/** Create a new inspection for a repair order. */
+export async function createInspectionForRepairOrder(repairOrderId) {
+  const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+
+  const { data, error } = await supabase
+    .from("inspections")
+    .insert([{
+      repair_order_id: repairOrderId,
+      status:          "draft",
+      created_by:      session?.user?.id ?? null,
+    }])
+    .select().single();
+
+  if (error) {
+    if (import.meta.env.DEV) console.error("[createInspectionForRepairOrder]", error);
+    throw error;
+  }
+  return data;
+}
+
+/** Bulk-insert the default checklist items for a new inspection. */
+export async function createDefaultInspectionItems(inspectionId) {
+  const rows = DEFAULT_INSPECTION_ITEMS.map((item) => ({
+    inspection_id:       inspectionId,
+    category:            item.category,
+    item_name:           item.item_name,
+    condition:           "not_checked",
+    sort_order:          item.sort_order,
+    is_customer_visible: true,
+  }));
+
+  const { data, error } = await supabase
+    .from("inspection_items").insert(rows).select();
+
+  if (error) {
+    if (import.meta.env.DEV) console.error("[createDefaultInspectionItems]", error);
+    throw error;
+  }
+  return data;
+}
+
+/** Update overall inspection fields (notes, status timestamps). */
+export async function updateInspection(inspectionId, fields) {
+  const ALLOWED = ["status","overall_notes","customer_visible_notes","completed_at","sent_to_customer_at"];
+  const payload = {};
+  for (const k of ALLOWED) if (k in fields) payload[k] = fields[k] ?? null;
+
+  const { data, error } = await supabase
+    .from("inspections").update(payload).eq("id", inspectionId).select().single();
+  if (error) {
+    if (import.meta.env.DEV) console.error("[updateInspection]", error);
+    throw error;
+  }
+  return data;
+}
+
+/** Update inspection status and set relevant timestamps. */
+export async function updateInspectionStatus(inspectionId, newStatus) {
+  const now = new Date().toISOString();
+  const extra = {};
+  if (newStatus === "completed")         extra.completed_at         = now;
+  if (newStatus === "sent_to_customer")  extra.sent_to_customer_at  = now;
+
+  return updateInspection(inspectionId, { status: newStatus, ...extra });
+}
+
+/** Update a single inspection item's condition, notes, etc. */
+export async function updateInspectionItem(itemId, fields) {
+  const ALLOWED = ["condition","notes","recommendation","is_customer_visible","sort_order"];
+  const payload = {};
+  for (const k of ALLOWED) if (k in fields) payload[k] = fields[k] ?? null;
+
+  const { data, error } = await supabase
+    .from("inspection_items").update(payload).eq("id", itemId).select().single();
+  if (error) {
+    if (import.meta.env.DEV) console.error("[updateInspectionItem]", error);
+    throw error;
+  }
+  return data;
+}
+
+/** Create a new custom inspection item. */
+export async function createInspectionItem(inspectionId, itemData) {
+  const { data, error } = await supabase
+    .from("inspection_items")
+    .insert([{
+      inspection_id:       inspectionId,
+      category:            itemData.category,
+      item_name:           itemData.item_name,
+      condition:           itemData.condition ?? "not_checked",
+      notes:               itemData.notes ?? null,
+      sort_order:          itemData.sort_order ?? 99,
+      is_customer_visible: itemData.is_customer_visible ?? true,
+    }])
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+/** List all active photos for an inspection. */
+export async function listInspectionPhotos(inspectionId) {
+  const { data, error } = await supabase
+    .from("inspection_photos")
+    .select("*")
+    .eq("inspection_id", inspectionId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Get a short-lived signed URL for staff photo preview (10 minutes). */
+export async function getSignedPhotoUrl(storagePath, expiresIn = 600) {
+  const { data, error } = await supabase.storage
+    .from("inspection-photos")
+    .createSignedUrl(storagePath, expiresIn);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+/**
+ * Upload a photo to the private inspection-photos bucket and record metadata.
+ * Never stores a full URL — only the storage_path is saved to the database.
+ */
+export async function uploadInspectionPhoto({
+  inspectionId, inspectionItemId, repairOrderId, file, caption,
+}) {
+  if (!ALLOWED_PHOTO_TYPES.includes(file.type)) {
+    throw new Error(`File type not allowed. Use JPEG, PNG, WebP, HEIC, or HEIF.`);
+  }
+  if (file.size > MAX_PHOTO_BYTES) {
+    throw new Error(`File is too large. Maximum size is 50 MB.`);
+  }
+
+  // Build a safe, unique storage path
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+  const storagePath = `repair-orders/${repairOrderId}/inspections/${inspectionId}/${Date.now()}-${safeName}`;
+
+  // Upload to the private bucket
+  const { error: uploadErr } = await supabase.storage
+    .from("inspection-photos")
+    .upload(storagePath, file, { contentType: file.type, upsert: false });
+  if (uploadErr) {
+    if (import.meta.env.DEV) console.error("[uploadInspectionPhoto] storage upload:", uploadErr);
+    throw uploadErr;
+  }
+
+  // Record metadata — storage_path only, never a full URL
+  const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+  const { data, error: dbErr } = await supabase
+    .from("inspection_photos")
+    .insert([{
+      inspection_id:       inspectionId,
+      inspection_item_id:  inspectionItemId ?? null,
+      repair_order_id:     repairOrderId,
+      storage_bucket:      "inspection-photos",
+      storage_path:        storagePath,
+      file_name:           file.name,
+      mime_type:           file.type,
+      size_bytes:          file.size,
+      caption:             caption ?? null,
+      is_customer_visible: true,
+      is_active:           true,
+      uploaded_by:         session?.user?.id ?? null,
+    }])
+    .select().single();
+
+  if (dbErr) {
+    if (import.meta.env.DEV) console.error("[uploadInspectionPhoto] db insert:", dbErr);
+    throw dbErr;
+  }
+  return data;
+}
+
+/** Update caption or visibility on a photo. */
+export async function updateInspectionPhoto(photoId, { caption, is_customer_visible }) {
+  const payload = {};
+  if (caption              !== undefined) payload.caption              = caption;
+  if (is_customer_visible  !== undefined) payload.is_customer_visible  = is_customer_visible;
+
+  const { data, error } = await supabase
+    .from("inspection_photos").update(payload).eq("id", photoId).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/** Soft-hide a photo without physical deletion. */
+export async function softHideInspectionPhoto(photoId) {
+  const { data, error } = await supabase
+    .from("inspection_photos").update({ is_active: false }).eq("id", photoId).select().single();
+  if (error) throw error;
+  return data;
+}
+
+// ─────────────────────────────────────────────────────────────
 // ACTIVITY LOGS
 // ─────────────────────────────────────────────────────────────
 

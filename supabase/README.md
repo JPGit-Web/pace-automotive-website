@@ -13,6 +13,8 @@ All migrations are run manually in the Supabase SQL Editor.
 | `002_appointment_requests.sql` | Phase 5A | `appointment_requests` |
 | `002b_service_role_grants.sql` | Phase 5B | service_role grants for `appointment_requests` |
 | `003_repair_orders.sql` | Phase 6A | `repair_orders`, RO number sequence, FK from `appointment_requests` |
+| `003b_repair_order_sequence_grants.sql` | Phase 6B | sequence grants for `repair_order_number_seq` |
+| `004_inspections.sql` | Phase 7A | `inspections`, `inspection_items`, `inspection_photos`, `inspection-photos` storage bucket |
 
 ---
 
@@ -32,6 +34,81 @@ All migrations are run manually in the Supabase SQL Editor.
 ## After Running Each Migration — Verify in Table Editor
 
 Go to **Table Editor** in the Supabase left sidebar and confirm:
+
+### After `004_inspections.sql`
+
+**Tables (Table Editor):**
+- [ ] `inspections` table exists with all columns
+- [ ] `inspection_items` table exists with all columns
+- [ ] `inspection_photos` table exists with all columns
+
+**Storage bucket (Storage in Supabase left sidebar):**
+- [ ] `inspection-photos` bucket exists
+- [ ] Bucket is **private** (lock icon, not a globe icon)
+- [ ] File size limit is 50 MB
+- [ ] Allowed MIME types include image/jpeg, image/png, image/webp
+
+**RLS (lock icon in Table Editor or Authentication → Policies):**
+- [ ] RLS enabled on `inspections`
+- [ ] RLS enabled on `inspection_items`
+- [ ] RLS enabled on `inspection_photos`
+
+**Table Policies (Authentication → Policies):**
+- [ ] `insp: authenticated users can select`
+- [ ] `insp: authenticated users can insert`
+- [ ] `insp: authenticated users can update`
+- [ ] `insp_items: authenticated users can select`
+- [ ] `insp_items: authenticated users can insert`
+- [ ] `insp_items: authenticated users can update`
+- [ ] `insp_photos: authenticated users can select`
+- [ ] `insp_photos: authenticated users can insert`
+- [ ] `insp_photos: authenticated users can update`
+- [ ] No DELETE policies on any inspection table
+- [ ] No anon policies on any inspection table
+
+**Storage Policies (Storage → Policies or Authentication → Policies → storage.objects):**
+- [ ] `insp-photos storage: authenticated select`
+- [ ] `insp-photos storage: authenticated insert`
+- [ ] `insp-photos storage: authenticated update`
+- [ ] No DELETE storage policy
+- [ ] No anon storage policy
+
+**Triggers (Database → Triggers):**
+- [ ] `trg_inspections_updated_at` on `inspections`
+- [ ] `trg_inspection_items_updated_at` on `inspection_items`
+- [ ] No trigger on `inspection_photos` (photos are not edited after upload)
+
+**Indexes (Database → Indexes):**
+- [ ] `idx_inspections_repair_order_id`
+- [ ] `idx_inspections_status`
+- [ ] `idx_inspections_created_at`
+- [ ] `idx_insp_items_inspection_id`
+- [ ] `idx_insp_items_category`
+- [ ] `idx_insp_items_condition`
+- [ ] `idx_insp_items_sort_order`
+- [ ] `idx_insp_photos_inspection_id`
+- [ ] `idx_insp_photos_inspection_item_id`
+- [ ] `idx_insp_photos_repair_order_id`
+- [ ] `idx_insp_photos_storage_path`
+- [ ] `idx_insp_photos_is_active`
+
+**Confirm no public photo access:**
+```sql
+-- Should return no rows for anon role on these tables
+select grantee, table_name, privilege_type
+from information_schema.role_table_grants
+where table_name in ('inspections', 'inspection_items', 'inspection_photos')
+  and grantee = 'anon';
+```
+Expected: zero rows.
+
+---
+
+### After `003b_repair_order_sequence_grants.sql`
+
+- [ ] Creating a repair order from the portal generates an RO number without permission errors
+
+---
 
 ### After `003_repair_orders.sql`
 

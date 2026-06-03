@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import PortalLayout from "../../components/portal/PortalLayout";
 import {
   listRepairOrders, getRepairOrder, createRepairOrder,
   updateRepairOrder, updateRepairOrderStatus,
   listCustomers, listVehiclesByCustomer, logActivity,
+  getInspectionByRepairOrder, createInspectionForRepairOrder, createDefaultInspectionItems,
 } from "../../lib/portalData";
 
 /* ── Constants ─────────────────────────────────────────────── */
@@ -113,9 +115,13 @@ export default function PortalRepairOrders() {
   const [saving,        setSaving]        = useState(false);
   const [saveError,     setSaveError]     = useState("");
   // For create modal — customer/vehicle selectors
-  const [allCustomers,  setAllCustomers]  = useState([]);
-  const [custVehicles,  setCustVehicles]  = useState([]);
-  const [custLoading,   setCustLoading]   = useState(false);
+  const [allCustomers,    setAllCustomers]    = useState([]);
+  const [custVehicles,    setCustVehicles]    = useState([]);
+  const [custLoading,     setCustLoading]     = useState(false);
+  // Inspection state for current RO
+  const [roInspection,    setRoInspection]    = useState(null);
+  const [inspLoading,     setInspLoading]     = useState(false);
+  const navigate = useNavigate();
 
   /* ── Load repair orders ── */
   const load = useCallback(async () => {
@@ -126,18 +132,41 @@ export default function PortalRepairOrders() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  /* ── Load detail when row selected ── */
+  /* ── Load detail + check for existing inspection ── */
   async function selectRO(ro) {
-    if (selected?.id === ro.id) { setSelected(null); setDetailData(null); return; }
+    if (selected?.id === ro.id) { setSelected(null); setDetailData(null); setRoInspection(null); return; }
     setSelected(ro);
     setDetailLoading(true);
+    setRoInspection(null);
     try {
-      setDetailData(await getRepairOrder(ro.id));
+      const [detail, insp] = await Promise.all([
+        getRepairOrder(ro.id),
+        getInspectionByRepairOrder(ro.id).catch(() => null),
+      ]);
+      setDetailData(detail);
+      setRoInspection(insp);
     } catch (err) {
-      if (import.meta.env.DEV) console.error("[PortalRepairOrders] getRepairOrder failed:", err);
+      if (import.meta.env.DEV) console.error("[PortalRepairOrders] detail load failed:", err);
       setDetailData(null);
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  /* ── Start inspection ── */
+  async function handleStartInspection() {
+    if (!selected) return;
+    setInspLoading(true);
+    try {
+      const insp = await createInspectionForRepairOrder(selected.id);
+      await createDefaultInspectionItems(insp.id);
+      await logActivity("inspection.created", "inspection", insp.id, { ro_number: selected.ro_number });
+      setRoInspection(insp);
+      navigate("/portal/inspections", { state: { inspectionId: insp.id } });
+    } catch {
+      alert("Failed to start inspection. Please try again.");
+    } finally {
+      setInspLoading(false);
     }
   }
 
@@ -501,12 +530,21 @@ export default function PortalRepairOrders() {
                 ))}
               </div>
 
-              {/* Future phase placeholders */}
+              {/* Linked actions */}
               <div style={{ display:"flex", gap:"8px", marginTop:"12px", paddingTop:"12px", borderTop:"1px solid var(--p-border)", flexWrap:"wrap" }}>
-                <button className="portalBtn portalBtnSecondary" disabled title="Coming in Phase 7">
-                  <i className="fa-solid fa-clipboard-check"></i> Start Inspection
-                  <span style={{ fontSize:".7rem", marginLeft:6, opacity:.6 }}>Phase 7</span>
-                </button>
+                {roInspection ? (
+                  <button className="portalBtn portalBtnPrimary"
+                    onClick={() => navigate("/portal/inspections", { state: { inspectionId: roInspection.id } })}>
+                    <i className="fa-solid fa-clipboard-check"></i> View Inspection
+                  </button>
+                ) : (
+                  <button className="portalBtn portalBtnSecondary"
+                    onClick={handleStartInspection}
+                    disabled={inspLoading || selected?.status === "cancelled"}>
+                    <i className="fa-solid fa-clipboard-check"></i>
+                    {inspLoading ? " Starting…" : " Start Inspection"}
+                  </button>
+                )}
                 <button className="portalBtn portalBtnSecondary" disabled title="Coming in Phase 8">
                   <i className="fa-solid fa-file-invoice-dollar"></i> Create Estimate
                   <span style={{ fontSize:".7rem", marginLeft:6, opacity:.6 }}>Phase 8</span>
