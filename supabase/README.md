@@ -16,6 +16,7 @@ All migrations are run manually in the Supabase SQL Editor.
 | `003b_repair_order_sequence_grants.sql` | Phase 6B | sequence grants for `repair_order_number_seq` |
 | `004_inspections.sql` | Phase 7A | `inspections`, `inspection_items`, `inspection_photos`, `inspection-photos` storage bucket |
 | `005_estimates.sql` | Phase 8A | `estimates`, `estimate_items`, `approval_tokens`, `estimate_number_seq` |
+| `005b_estimate_service_role_grants.sql` | Phase 8C | service_role grants for estimate approval Netlify Functions |
 
 ---
 
@@ -35,6 +36,23 @@ All migrations are run manually in the Supabase SQL Editor.
 ## After Running Each Migration — Verify in Table Editor
 
 Go to **Table Editor** in the Supabase left sidebar and confirm:
+
+### After `005b_estimate_service_role_grants.sql`
+
+- [ ] Run after `005_estimates.sql`
+- [ ] Grants service_role SELECT/UPDATE on `estimates`, `estimate_items`, `approval_tokens`
+- [ ] Grants service_role SELECT on `repair_orders`, `customers`, `vehicles`
+- [ ] Grants service_role INSERT on `activity_logs`
+- [ ] Anon access remains blocked on all estimate tables
+- [ ] Test by sending an estimate from the portal — the Netlify Function should succeed
+
+**Also add `SITE_URL` to Netlify env vars** (for the approval link URL in emails):
+
+| Key | Value |
+|---|---|
+| `SITE_URL` | `https://powerautomotive.ca` |
+
+---
 
 ### After `005_estimates.sql`
 

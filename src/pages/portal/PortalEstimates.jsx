@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import PortalLayout from "../../components/portal/PortalLayout";
+import { supabase } from "../../lib/supabase";
 import {
   listEstimates, getEstimate,
   updateEstimate, updateEstimateStatus,
   createEstimateItem, updateEstimateItem, softHideEstimateItem,
   recalculateEstimateTotals, logActivity,
 } from "../../lib/portalData";
+
+const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
 /* ── Constants ─────────────────────────────────────────────── */
 const STATUS_LABELS = {
@@ -199,6 +202,13 @@ export default function PortalEstimates() {
   const [itemFormErrors,setItemFormErrors]= useState({});
   const [savingItem,    setSavingItem]    = useState(false);
   const [itemSaveError, setItemSaveError] = useState("");
+  // Send for Approval modal
+  const [sendModal,    setSendModal]    = useState(false);
+  const [sendEmail,    setSendEmail]    = useState("");
+  const [sendMessage,  setSendMessage]  = useState("");
+  const [sending,      setSending]      = useState(false);
+  const [sendError,    setSendError]    = useState("");
+  const [sendSuccess,  setSendSuccess]  = useState(false);
 
   /* ── Load list ── */
   const loadList = useCallback(async () => {
@@ -293,6 +303,61 @@ export default function PortalEstimates() {
     } catch { /* silent */ }
     finally { setSavingMeta(false); }
   }
+
+  /* ── Send for Approval ── */
+  function openSendModal() {
+    // Pre-fill email from customer record if available
+    setSendEmail(activeEst?.customer?.email ?? "");
+    setSendMessage(activeEst?.customer_message ?? "");
+    setSendError("");
+    setSendSuccess(false);
+    setSendModal(true);
+  }
+
+  async function handleSendForApproval(e) {
+    e.preventDefault();
+    if (!isValidEmail(sendEmail)) { setSendError("A valid customer email is required."); return; }
+    setSending(true); setSendError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+      const res = await fetch("/.netlify/functions/send-estimate-approval", {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          estimateId:    activeEst.id,
+          customerEmail: sendEmail.trim(),
+          message:       sendMessage.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to send approval email.");
+      await logActivity("estimate.sent_for_approval", "estimate", activeEst.id, {
+        estimate_number: activeEst.estimate_number, email: sendEmail,
+      });
+      setSendSuccess(true);
+      // Refresh estimate to show updated status
+      const refreshed = await getEstimate(activeEst.id);
+      setActiveEst(refreshed);
+      setItems(refreshed.items || []);
+      setTotals({ subtotal_cents: refreshed.subtotal_cents, tax_cents: refreshed.tax_cents, total_cents: refreshed.total_cents, approved_total_cents: refreshed.approved_total_cents });
+      setEstimates((p) => p.map((e) => e.id === refreshed.id ? { ...e, status: refreshed.status } : e));
+    } catch (err) {
+      setSendError(err.message || "Failed to send. Please try again.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const canSendForApproval =
+    activeEst &&
+    activeEst.status !== "cancelled" &&
+    activeEst.status !== "approved" &&
+    (totals?.total_cents ?? 0) > 0 &&
+    items.length > 0;
 
   /* ── Item form field handler ── */
   function handleItemField(e) {
@@ -561,20 +626,34 @@ export default function PortalEstimates() {
                 </div>
               )}
 
-              {/* Action placeholders */}
+              {/* Customer Actions */}
               <div style={{ flex:1 }}>
                 <div className="portalCard" style={{ background:"var(--p-bg)" }}>
                   <p className="portalCardTitle">Customer Actions</p>
                   <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
-                    <button className="portalBtn portalBtnSecondary" style={{ width:"100%", justifyContent:"flex-start" }}
-                      disabled title="Customer approval links — coming in Phase 8C">
-                      <i className="fa-solid fa-paper-plane"></i> Send for Approval
-                      <span style={{ marginLeft:"auto", fontSize:".7rem", opacity:.6 }}>Phase 8C</span>
+                    {activeEst.sent_at && (
+                      <div style={{ fontSize:".78rem", color:"var(--p-text-2)", marginBottom:4 }}>
+                        <i className="fa-solid fa-check" style={{ color:"var(--p-success)", marginRight:6 }}></i>
+                        Sent {new Date(activeEst.sent_at).toLocaleDateString("en-CA", { month:"short", day:"numeric", year:"numeric" })}
+                      </div>
+                    )}
+                    <button className="portalBtn portalBtnPrimary" style={{ width:"100%", justifyContent:"flex-start" }}
+                      onClick={openSendModal} disabled={!canSendForApproval}>
+                      <i className="fa-solid fa-paper-plane"></i>
+                      {activeEst.status === "sent" ? " Resend Approval Email" : " Send for Approval"}
                     </button>
-                    <p style={{ margin:0, fontSize:".75rem", color:"var(--p-text-3)", lineHeight:1.5 }}>
-                      Customer approval links will be built in Phase 8C.
-                      The estimate can be reviewed and sent via a secure email link.
-                    </p>
+                    {!canSendForApproval && activeEst.status !== "approved" && (
+                      <p style={{ margin:0, fontSize:".73rem", color:"var(--p-text-3)", lineHeight:1.5 }}>
+                        {items.length === 0 ? "Add at least one line item before sending." :
+                         (totals?.total_cents ?? 0) === 0 ? "Total must be greater than $0." :
+                         "Estimate cannot be sent in its current status."}
+                      </p>
+                    )}
+                    {activeEst.status === "approved" && (
+                      <p style={{ margin:0, fontSize:".73rem", color:"var(--p-success)", lineHeight:1.5 }}>
+                        <i className="fa-solid fa-circle-check"></i> Customer has approved this estimate.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -597,6 +676,67 @@ export default function PortalEstimates() {
               <div className="portalDemoBanner" style={{ marginTop:12, background:"var(--p-danger-bg)", borderColor:"#f4c0bc", color:"var(--p-danger)" }}>
                 <i className="fa-solid fa-triangle-exclamation"></i>
                 <span>{itemSaveError}</span>
+              </div>
+            )}
+
+            {/* Send for Approval modal */}
+            {sendModal && (
+              <div className="portalModalOverlay" onClick={(e) => e.target === e.currentTarget && setSendModal(false)}>
+                <div className="portalModalCard" style={{ maxWidth:"460px" }} role="dialog" aria-modal="true">
+                  <div className="portalModalHeader">
+                    <h2 className="portalModalTitle">Send Estimate for Approval</h2>
+                    <button className="portalModalClose" onClick={() => setSendModal(false)}><i className="fa-solid fa-xmark"></i></button>
+                  </div>
+                  {sendSuccess ? (
+                    <div className="portalModalBody" style={{ textAlign:"center", padding:"32px 24px" }}>
+                      <i className="fa-solid fa-circle-check" style={{ fontSize:"2rem", color:"var(--p-success)", marginBottom:12, display:"block" }}></i>
+                      <p style={{ fontWeight:700, color:"var(--p-text)", margin:"0 0 8px" }}>Approval email sent!</p>
+                      <p style={{ fontSize:".85rem", color:"var(--p-text-2)", margin:0 }}>
+                        The customer will receive a secure link valid for 7 days.
+                      </p>
+                      <button className="portalBtn portalBtnPrimary" style={{ marginTop:20 }} onClick={() => setSendModal(false)}>
+                        Done
+                      </button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSendForApproval} noValidate>
+                      <div className="portalModalBody">
+                        {sendError && <div className="portalModalError">{sendError}</div>}
+                        <div className="portalForm">
+                          <div style={{ padding:"12px 14px", background:"var(--p-bg)", border:"1px solid var(--p-border)", borderRadius:"var(--p-radius-sm)", marginBottom:4, fontSize:".85rem" }}>
+                            <strong>{activeEst.estimate_number}</strong>
+                            {activeEst.ro?.ro_number && <span style={{ color:"var(--p-text-2)", marginLeft:8 }}>→ {activeEst.ro.ro_number}</span>}
+                            <span style={{ display:"block", color:"var(--p-text-2)", marginTop:2 }}>Total: <strong>{fmtCents(totals?.total_cents)}</strong></span>
+                          </div>
+                          <div className="portalFormField">
+                            <label className="portalFormLabel">Customer Email<span className="req">*</span></label>
+                            <input className="portalFormInput" type="email" autoComplete="email"
+                              value={sendEmail} onChange={(e) => setSendEmail(e.target.value)}
+                              placeholder="customer@example.com" disabled={sending} />
+                          </div>
+                          <div className="portalFormField">
+                            <label className="portalFormLabel">Message to Customer (optional)</label>
+                            <textarea className="portalFormTextarea" rows={3}
+                              value={sendMessage} onChange={(e) => setSendMessage(e.target.value)}
+                              placeholder="Any note to include with the estimate email…"
+                              disabled={sending} />
+                          </div>
+                          <p style={{ margin:0, fontSize:".75rem", color:"var(--p-text-3)", lineHeight:1.5 }}>
+                            <i className="fa-solid fa-lock" style={{ marginRight:5 }}></i>
+                            A secure approval link will be emailed to the customer. The link expires in 7 days.
+                            No payment is collected at this step.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="portalModalFooter">
+                        <button type="button" className="portalBtn portalBtnSecondary" onClick={() => setSendModal(false)} disabled={sending}>Cancel</button>
+                        <button type="submit" className="portalBtn portalBtnPrimary" disabled={sending}>
+                          {sending ? "Sending…" : "Send Approval Email"}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
               </div>
             )}
           </>
