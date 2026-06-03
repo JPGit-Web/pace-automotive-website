@@ -60,7 +60,7 @@ export default function PortalLogin() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={styles.input}
-              placeholder="you@example.com"
+              placeholder="staff@example.com"
               disabled={loading}
             />
           </div>
@@ -88,7 +88,7 @@ export default function PortalLogin() {
 
           <button
             type="submit"
-            className="portalDemoBtn"
+            className="portalSignInBtn"
             disabled={loading}
             style={{ opacity: loading ? .6 : 1, cursor: loading ? "not-allowed" : "pointer" }}
           >
@@ -96,7 +96,9 @@ export default function PortalLogin() {
           </button>
         </form>
 
-        <p style={styles.staffNote}>Authorized P.A.C.E. staff only.</p>
+        <p style={styles.staffNote}>
+          Authorized P.A.C.E. staff only.
+        </p>
       </div>
     </div>
   );

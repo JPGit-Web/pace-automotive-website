@@ -27,11 +27,11 @@ export default function PortalDashboard() {
   return (
     <PortalLayout title="Dashboard">
 
-      {/* Demo banner */}
+      {/* Dashboard status banner */}
       <div className="portalDemoBanner">
-        <i className="fa-solid fa-triangle-exclamation"></i>
+        <i className="fa-solid fa-circle-info"></i>
         <span>
-          <strong>Demo mode</strong> — placeholder data only. Real data connects in Phase 3 when Supabase is added.
+          <strong>Dashboard preview</strong> — some dashboard metrics are placeholder data. Live reporting will be connected in a later phase.
         </span>
       </div>
 
@@ -39,23 +39,23 @@ export default function PortalDashboard() {
       <div className="portalStatGrid">
         <div className="portalStatCard navy">
           <span className="portalStatLabel">Today's Appointments</span>
-          <span className="portalStatValue">3</span>
-          <span className="portalStatSub">Next: 10:00 AM</span>
+          <span className="portalStatValue">—</span>
+          <span className="portalStatSub">Preview data</span>
         </div>
         <div className="portalStatCard yellow">
           <span className="portalStatLabel">Open Repair Orders</span>
-          <span className="portalStatValue">7</span>
-          <span className="portalStatSub">2 in progress</span>
+          <span className="portalStatValue">—</span>
+          <span className="portalStatSub">Preview data</span>
         </div>
         <div className="portalStatCard red">
           <span className="portalStatLabel">Awaiting Approval</span>
-          <span className="portalStatValue">2</span>
-          <span className="portalStatSub">Estimates sent</span>
+          <span className="portalStatValue">—</span>
+          <span className="portalStatSub">Preview data</span>
         </div>
         <div className="portalStatCard green">
           <span className="portalStatLabel">Unpaid Invoices</span>
-          <span className="portalStatValue">4</span>
-          <span className="portalStatSub">Oldest: 8 days</span>
+          <span className="portalStatValue">—</span>
+          <span className="portalStatSub">Preview data</span>
         </div>
       </div>
 

@@ -689,7 +689,7 @@
   margin: 0 0 24px;
 }
 
-.portalDemoBtn {
+.portalSignInBtn {
   display: block;
   width: 100%;
   padding: 12px;
@@ -706,7 +706,7 @@
   transition: opacity .12s;
 }
 
-.portalDemoBtn:hover {
+.portalSignInBtn:hover {
   opacity: .9;
 }
 
@@ -759,3 +759,438 @@
     padding: 32px 24px;
   }
 }
+
+/* ============================================================
+   SEARCH BAR
+   ============================================================ */
+.portalSearchBar {
+  position: relative;
+  max-width: 360px;
+}
+
+.portalSearchBar i {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--p-text-3);
+  font-size: .85rem;
+  pointer-events: none;
+}
+
+.portalSearchInput {
+  width: 100%;
+  padding: 9px 12px 9px 34px;
+  border: 1.5px solid var(--p-border);
+  border-radius: var(--p-radius-sm);
+  font-family: inherit;
+  font-size: .88rem;
+  color: var(--p-text);
+  background: var(--p-surface);
+  outline: none;
+  transition: border-color .15s;
+}
+
+.portalSearchInput:focus {
+  border-color: var(--p-navy);
+  box-shadow: 0 0 0 3px rgba(11,27,58,.08);
+}
+
+.portalSearchInput::placeholder {
+  color: var(--p-text-3);
+}
+
+/* ============================================================
+   TOOLBAR — search + actions in one row
+   ============================================================ */
+.portalToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   MODAL
+   ============================================================ */
+.portalModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.portalModalCard {
+  background: var(--p-surface);
+  border-radius: var(--p-radius);
+  box-shadow: 0 16px 48px rgba(0,0,0,.22);
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.portalModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--p-border);
+  flex-shrink: 0;
+}
+
+.portalModalTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--p-text);
+}
+
+.portalModalClose {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  color: var(--p-text-3);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1;
+  font-family: inherit;
+}
+
+.portalModalClose:hover {
+  background: var(--p-bg);
+  color: var(--p-text);
+}
+
+.portalModalBody {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.portalModalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--p-border);
+  flex-shrink: 0;
+}
+
+.portalModalError {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: var(--p-danger-bg);
+  border: 1px solid #f4c0bc;
+  border-radius: var(--p-radius-sm);
+  font-size: .83rem;
+  color: var(--p-danger);
+  line-height: 1.5;
+}
+
+/* ============================================================
+   FORM (inside modal or inline)
+   ============================================================ */
+.portalForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.portalFormRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.portalFormField {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.portalFormField.full {
+  grid-column: 1 / -1;
+}
+
+.portalFormLabel {
+  font-size: .75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--p-text-2);
+}
+
+.portalFormLabel .req {
+  color: var(--p-danger);
+  margin-left: 2px;
+}
+
+.portalFormInput,
+.portalFormSelect,
+.portalFormTextarea {
+  padding: 9px 12px;
+  border: 1.5px solid var(--p-border);
+  border-radius: var(--p-radius-sm);
+  font-family: inherit;
+  font-size: .9rem;
+  color: var(--p-text);
+  background: var(--p-surface);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+  width: 100%;
+}
+
+.portalFormInput:focus,
+.portalFormSelect:focus,
+.portalFormTextarea:focus {
+  border-color: var(--p-navy);
+  box-shadow: 0 0 0 3px rgba(11,27,58,.08);
+}
+
+.portalFormInput.invalid,
+.portalFormSelect.invalid,
+.portalFormTextarea.invalid {
+  border-color: var(--p-danger);
+}
+
+.portalFormTextarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.portalFormFieldError {
+  font-size: .75rem;
+  color: var(--p-danger);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.portalFormSection {
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px solid var(--p-border);
+  font-size: .75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--p-text-3);
+}
+
+@media (max-width: 520px) {
+  .portalFormRow { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   CUSTOMER / VEHICLE DETAIL VIEW
+   ============================================================ */
+.portalDetailBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: .83rem;
+  font-weight: 600;
+  color: var(--p-text-2);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  margin-bottom: 16px;
+  text-decoration: none;
+}
+
+.portalDetailBack:hover {
+  color: var(--p-navy);
+}
+
+.portalDetailHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.portalDetailName {
+  margin: 0 0 4px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--p-text);
+}
+
+.portalDetailSub {
+  margin: 0;
+  font-size: .85rem;
+  color: var(--p-text-2);
+}
+
+.portalDetailActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.portalDetailGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+@media (max-width: 600px) {
+  .portalDetailGrid { grid-template-columns: 1fr; }
+}
+
+.portalDetailItem {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--p-border);
+}
+
+.portalDetailItem:nth-last-child(-n+2) {
+  border-bottom: none;
+}
+
+.portalDetailLabel {
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--p-text-3);
+  margin-bottom: 3px;
+}
+
+.portalDetailValue {
+  font-size: .9rem;
+  color: var(--p-text);
+  line-height: 1.5;
+}
+
+.portalDetailValue.empty {
+  color: var(--p-text-3);
+  font-style: italic;
+}
+
+.portalSectionTitle {
+  font-size: .78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--p-text-3);
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ============================================================
+   VEHICLE CARDS
+   ============================================================ */
+.portalVehicleList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.portalVehicleCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--p-border);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-bg);
+  flex-wrap: wrap;
+}
+
+.portalVehicleInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.portalVehicleName {
+  font-weight: 700;
+  font-size: .92rem;
+  color: var(--p-text);
+  margin-bottom: 2px;
+}
+
+.portalVehicleMeta {
+  font-size: .78rem;
+  color: var(--p-text-3);
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.portalVehicleActions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   TABLE ACTION BUTTONS (small icon buttons in table rows)
+   ============================================================ */
+.portalTableActions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.portalBtnIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--p-radius-sm);
+  border: 1px solid var(--p-border);
+  background: transparent;
+  color: var(--p-text-2);
+  font-size: .8rem;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+  font-family: inherit;
+}
+
+.portalBtnIcon:hover {
+  background: var(--p-bg);
+  color: var(--p-text);
+}
+
+.portalBtnIcon.danger:hover {
+  background: var(--p-danger-bg);
+  color: var(--p-danger);
+  border-color: #f4c0bc;
+}
+
+/* ============================================================
+   COUNT BADGE
+   ============================================================ */
+.portalCountBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--p-bg);
+  border: 1px solid var(--p-border);
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--p-text-2);
+}
+
