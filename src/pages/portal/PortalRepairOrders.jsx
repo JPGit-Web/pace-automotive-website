@@ -7,6 +7,7 @@ import {
   listCustomers, listVehiclesByCustomer, logActivity,
   getInspectionByRepairOrder, createInspectionForRepairOrder, createDefaultInspectionItems,
   getEstimateByRepairOrder, createEstimateForRepairOrder,
+  getHelcimInvoiceByRepairOrder, createManualHelcimInvoice,
 } from "../../lib/portalData";
 
 /* ── Constants ─────────────────────────────────────────────── */
@@ -125,6 +126,9 @@ export default function PortalRepairOrders() {
   // Estimate state for current RO
   const [roEstimate,      setRoEstimate]      = useState(null);
   const [estLoading,      setEstLoading]      = useState(false);
+  // Invoice state for current RO
+  const [roInvoice,       setRoInvoice]       = useState(null);
+  const [invLoading,      setInvLoading]      = useState(false);
   const navigate = useNavigate();
 
   /* ── Load repair orders ── */
@@ -143,20 +147,41 @@ export default function PortalRepairOrders() {
     setDetailLoading(true);
     setRoInspection(null);
     setRoEstimate(null);
+    setRoInvoice(null);
     try {
-      const [detail, insp, est] = await Promise.all([
+      const [detail, insp, est, inv] = await Promise.all([
         getRepairOrder(ro.id),
         getInspectionByRepairOrder(ro.id).catch(() => null),
         getEstimateByRepairOrder(ro.id).catch(() => null),
+        getHelcimInvoiceByRepairOrder(ro.id).catch(() => null),
       ]);
       setDetailData(detail);
       setRoInspection(insp);
       setRoEstimate(est);
+      setRoInvoice(inv);
     } catch (err) {
       if (import.meta.env.DEV) console.error("[PortalRepairOrders] detail load failed:", err);
       setDetailData(null);
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  /* ── Link invoice ── */
+  async function handleLinkInvoice() {
+    if (!selected) return;
+    setInvLoading(true);
+    try {
+      const inv = await createManualHelcimInvoice({ repair_order_id: selected.id });
+      await logActivity("invoice.created", "helcim_invoice", inv.id, {
+        ro_number: selected.ro_number, manual: true,
+      });
+      setRoInvoice(inv);
+      navigate("/portal/invoices", { state: { invoiceId: inv.id } });
+    } catch {
+      alert("Failed to create invoice record. Please try again.");
+    } finally {
+      setInvLoading(false);
     }
   }
 
@@ -583,10 +608,19 @@ export default function PortalRepairOrders() {
                     {estLoading ? " Creating…" : " Create Estimate"}
                   </button>
                 )}
-                <button className="portalBtn portalBtnSecondary" disabled title="Coming in Phase 9">
-                  <i className="fa-solid fa-receipt"></i> Link Invoice
-                  <span style={{ fontSize:".7rem", marginLeft:6, opacity:.6 }}>Phase 9</span>
-                </button>
+                {roInvoice ? (
+                  <button className="portalBtn portalBtnPrimary"
+                    onClick={() => navigate("/portal/invoices", { state: { invoiceId: roInvoice.id } })}>
+                    <i className="fa-solid fa-receipt"></i> View Invoice
+                  </button>
+                ) : (
+                  <button className="portalBtn portalBtnSecondary"
+                    onClick={handleLinkInvoice}
+                    disabled={invLoading || selected?.status === "cancelled"}>
+                    <i className="fa-solid fa-receipt"></i>
+                    {invLoading ? " Creating…" : " Link Invoice"}
+                  </button>
+                )}
               </div>
             </>
           ) : (

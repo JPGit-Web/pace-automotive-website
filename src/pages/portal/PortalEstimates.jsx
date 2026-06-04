@@ -2,11 +2,13 @@ import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import PortalLayout from "../../components/portal/PortalLayout";
 import { supabase } from "../../lib/supabase";
+import { useNavigate } from "react-router-dom";
 import {
   listEstimates, getEstimate,
   updateEstimate, updateEstimateStatus,
   createEstimateItem, updateEstimateItem, softHideEstimateItem,
   recalculateEstimateTotals, logActivity,
+  getHelcimInvoiceByEstimate, createHelcimInvoiceFromEstimate,
 } from "../../lib/portalData";
 
 const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
@@ -176,7 +178,8 @@ function ItemForm({ formData, formErrors, onChange, saving, onSubmit, onClose, t
 
 /* ============================================================ */
 export default function PortalEstimates() {
-  const location = useLocation();
+  const location  = useLocation();
+  const navigate  = useNavigate();
 
   /* ── List state ── */
   const [estimates,    setEstimates]    = useState([]);
@@ -202,6 +205,9 @@ export default function PortalEstimates() {
   const [itemFormErrors,setItemFormErrors]= useState({});
   const [savingItem,    setSavingItem]    = useState(false);
   const [itemSaveError, setItemSaveError] = useState("");
+  // Invoice linking
+  const [estInvoice,   setEstInvoice]   = useState(null);
+  const [invLoading,   setInvLoading]   = useState(false);
   // Send for Approval modal
   const [sendModal,    setSendModal]    = useState(false);
   const [sendEmail,    setSendEmail]    = useState("");
@@ -238,6 +244,9 @@ export default function PortalEstimates() {
       setLocalTitle(est.title ?? "");
       setLocalMsg(est.customer_message ?? "");
       setTotals({ subtotal_cents: est.subtotal_cents, tax_cents: est.tax_cents, total_cents: est.total_cents, approved_total_cents: est.approved_total_cents });
+      // Check for existing invoice
+      const inv = await getHelcimInvoiceByEstimate(estimateId).catch(() => null);
+      setEstInvoice(inv);
     } catch (err) {
       if (import.meta.env.DEV) console.error("[PortalEstimates] open builder:", err);
       setView("list");
@@ -349,6 +358,24 @@ export default function PortalEstimates() {
       setSendError(err.message || "Failed to send. Please try again.");
     } finally {
       setSending(false);
+    }
+  }
+
+  /* ── Create invoice from estimate ── */
+  async function handleCreateInvoice() {
+    if (!activeEst) return;
+    setInvLoading(true);
+    try {
+      const inv = await createHelcimInvoiceFromEstimate(activeEst.id);
+      await logActivity("invoice.created", "helcim_invoice", inv.id, {
+        estimate_number: activeEst.estimate_number, from_estimate: true,
+      });
+      setEstInvoice(inv);
+      navigate("/portal/invoices", { state: { invoiceId: inv.id } });
+    } catch {
+      alert("Failed to create invoice record. Please try again.");
+    } finally {
+      setInvLoading(false);
     }
   }
 
@@ -653,6 +680,20 @@ export default function PortalEstimates() {
                       <p style={{ margin:0, fontSize:".73rem", color:"var(--p-success)", lineHeight:1.5 }}>
                         <i className="fa-solid fa-circle-check"></i> Customer has approved this estimate.
                       </p>
+                    )}
+                    <hr style={{ border:"none", borderTop:"1px solid var(--p-border)", margin:"4px 0" }} />
+                    {estInvoice ? (
+                      <button className="portalBtn portalBtnPrimary" style={{ width:"100%", justifyContent:"flex-start" }}
+                        onClick={() => navigate("/portal/invoices", { state: { invoiceId: estInvoice.id } })}>
+                        <i className="fa-solid fa-receipt"></i> View Invoice
+                      </button>
+                    ) : (
+                      <button className="portalBtn portalBtnSecondary" style={{ width:"100%", justifyContent:"flex-start" }}
+                        onClick={handleCreateInvoice}
+                        disabled={invLoading || activeEst.status === "cancelled" || (totals?.total_cents ?? 0) === 0}>
+                        <i className="fa-solid fa-receipt"></i>
+                        {invLoading ? " Creating…" : " Create Invoice Record"}
+                      </button>
                     )}
                   </div>
                 </div>

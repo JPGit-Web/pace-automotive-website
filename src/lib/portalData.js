@@ -397,6 +397,341 @@ export async function convertAppointmentToRepairOrder(appointmentRequestId, {
 }
 
 // ─────────────────────────────────────────────────────────────
+// HELCIM INVOICES
+// ─────────────────────────────────────────────────────────────
+
+const HELCIM_INV_EDITABLE = [
+  "helcim_invoice_id", "helcim_invoice_number", "helcim_customer_id",
+  "helcim_payment_link", "status", "payment_status",
+  "subtotal_cents", "tax_cents", "total_cents",
+  "amount_paid_cents", "amount_due_cents",
+  "issued_at", "due_at", "paid_at", "voided_at", "notes",
+];
+
+/** List all Helcim invoices with RO / customer / vehicle joined. */
+export async function listHelcimInvoices() {
+  const { data, error } = await supabase
+    .from("helcim_invoices")
+    .select(`
+      id, helcim_invoice_id, helcim_invoice_number, helcim_payment_link,
+      status, payment_status,
+      subtotal_cents, tax_cents, total_cents, amount_paid_cents, amount_due_cents,
+      issued_at, due_at, paid_at, created_at, repair_order_id, estimate_id,
+      repair_orders (
+        id, ro_number,
+        customers (first_name, last_name),
+        vehicles   (year, make, model)
+      )
+    `)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Full invoice detail — separate queries to avoid PostgREST join ambiguity.
+ */
+export async function getHelcimInvoice(invoiceId) {
+  const { data: inv, error } = await supabase
+    .from("helcim_invoices").select("*").eq("id", invoiceId).single();
+  if (error) throw error;
+
+  const { data: items } = await supabase
+    .from("helcim_invoice_items").select("*")
+    .eq("helcim_invoice_id", invoiceId)
+    .order("sort_order", { ascending: true });
+
+  let ro = null, customer = null, vehicle = null, estimate = null;
+  if (inv.repair_order_id) {
+    const { data: roData } = await supabase
+      .from("repair_orders").select("id, ro_number, customer_id, vehicle_id")
+      .eq("id", inv.repair_order_id).single();
+    ro = roData;
+    if (ro?.customer_id) {
+      const { data } = await supabase.from("customers")
+        .select("id, first_name, last_name, email, phone").eq("id", ro.customer_id).single();
+      customer = data;
+    }
+    if (ro?.vehicle_id) {
+      const { data } = await supabase.from("vehicles")
+        .select("id, year, make, model").eq("id", ro.vehicle_id).single();
+      vehicle = data;
+    }
+  }
+  if (inv.estimate_id) {
+    const { data } = await supabase.from("estimates")
+      .select("id, estimate_number, status, total_cents, approved_total_cents")
+      .eq("id", inv.estimate_id).single();
+    estimate = data;
+  }
+
+  return { ...inv, items: items || [], ro, customer, vehicle, estimate };
+}
+
+/** Get the most recent invoice for a repair order (null if none). */
+export async function getHelcimInvoiceByRepairOrder(repairOrderId) {
+  const { data, error } = await supabase
+    .from("helcim_invoices")
+    .select("id, helcim_invoice_number, status, payment_status")
+    .eq("repair_order_id", repairOrderId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ?? null;
+}
+
+/** Get the invoice linked to a specific estimate (null if none). */
+export async function getHelcimInvoiceByEstimate(estimateId) {
+  const { data, error } = await supabase
+    .from("helcim_invoices")
+    .select("id, helcim_invoice_number, status, payment_status")
+    .eq("estimate_id", estimateId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ?? null;
+}
+
+/** Create a manual invoice tracking record (no Helcim API called). */
+export async function createManualHelcimInvoice(data) {
+  const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+  const payload = { created_by: session?.user?.id ?? null };
+  for (const k of HELCIM_INV_EDITABLE) if (k in data) payload[k] = data[k] ?? null;
+  if (!payload.repair_order_id && data.repair_order_id)
+    payload.repair_order_id = data.repair_order_id;
+
+  const { data: inv, error } = await supabase
+    .from("helcim_invoices").insert([payload]).select().single();
+  if (error) {
+    if (import.meta.env.DEV) console.error("[createManualHelcimInvoice]", error);
+    throw error;
+  }
+  return inv;
+}
+
+/**
+ * Create an invoice tracking record pre-populated from an approved estimate.
+ * Also snapshots active customer-visible estimate items into helcim_invoice_items.
+ */
+export async function createHelcimInvoiceFromEstimate(estimateId, extraData = {}) {
+  // Fetch estimate
+  const { data: est, error: estErr } = await supabase
+    .from("estimates")
+    .select("id, repair_order_id, subtotal_cents, tax_cents, total_cents, approved_total_cents, status")
+    .eq("id", estimateId).single();
+  if (estErr) throw estErr;
+
+  // Prefer approved total if available
+  const useApproved = est.approved_total_cents > 0;
+  const totalCents  = useApproved ? est.approved_total_cents : est.total_cents;
+  const subCents    = useApproved ? Math.round(totalCents / 1.05) : est.subtotal_cents;
+  const taxCents    = totalCents - subCents;
+
+  const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+
+  // Create invoice row
+  const { data: inv, error: invErr } = await supabase
+    .from("helcim_invoices")
+    .insert([{
+      repair_order_id:  est.repair_order_id,
+      estimate_id:      estimateId,
+      status:           extraData.status           ?? "draft",
+      payment_status:   extraData.payment_status   ?? "unpaid",
+      subtotal_cents:   subCents,
+      tax_cents:        taxCents,
+      total_cents:      totalCents,
+      amount_paid_cents: 0,
+      amount_due_cents:  totalCents,
+      currency:         "CAD",
+      helcim_invoice_id:     extraData.helcim_invoice_id     ?? null,
+      helcim_invoice_number: extraData.helcim_invoice_number ?? null,
+      helcim_customer_id:    extraData.helcim_customer_id    ?? null,
+      helcim_payment_link:   extraData.helcim_payment_link   ?? null,
+      issued_at:  extraData.issued_at  ?? null,
+      due_at:     extraData.due_at     ?? null,
+      notes:      extraData.notes      ?? null,
+      created_by: session?.user?.id   ?? null,
+    }])
+    .select().single();
+  if (invErr) {
+    if (import.meta.env.DEV) console.error("[createHelcimInvoiceFromEstimate] insert:", invErr);
+    throw invErr;
+  }
+
+  // Snapshot estimate items
+  await createHelcimInvoiceItemsFromEstimate(inv.id, estimateId).catch((e) => {
+    if (import.meta.env.DEV) console.warn("[createHelcimInvoiceFromEstimate] item snapshot failed:", e);
+  });
+
+  return inv;
+}
+
+/** Snapshot active customer-visible estimate items into helcim_invoice_items. */
+export async function createHelcimInvoiceItemsFromEstimate(invoiceId, estimateId) {
+  const { data: items } = await supabase
+    .from("estimate_items")
+    .select("id, description, quantity, unit_price_cents, line_total_cents, item_type, sort_order, approval_status")
+    .eq("estimate_id", estimateId)
+    .eq("is_active", true)
+    .eq("is_customer_visible", true)
+    .order("sort_order", { ascending: true });
+
+  if (!items?.length) return [];
+
+  const snapshots = items.map((i) => ({
+    helcim_invoice_id: invoiceId,
+    estimate_item_id:  i.id,
+    description:       i.description,
+    quantity:          i.quantity,
+    unit_price_cents:  i.unit_price_cents,
+    line_total_cents:  i.line_total_cents,
+    item_type:         i.item_type,
+    sort_order:        i.sort_order,
+  }));
+
+  const { data, error } = await supabase
+    .from("helcim_invoice_items").insert(snapshots).select();
+  if (error) throw error;
+  return data;
+}
+
+/** Create a single helcim_invoice_items snapshot. */
+export async function createHelcimInvoiceItemSnapshot(invoiceId, itemData) {
+  const { data, error } = await supabase
+    .from("helcim_invoice_items")
+    .insert([{ helcim_invoice_id: invoiceId, ...itemData }])
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+/** List all line item snapshots for an invoice. */
+export async function listHelcimInvoiceItems(invoiceId) {
+  const { data, error } = await supabase
+    .from("helcim_invoice_items").select("*")
+    .eq("helcim_invoice_id", invoiceId)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Update editable fields on a helcim invoice. */
+export async function updateHelcimInvoice(invoiceId, fields) {
+  const payload = {};
+  for (const k of HELCIM_INV_EDITABLE) if (k in fields) payload[k] = fields[k] ?? null;
+
+  const { data, error } = await supabase
+    .from("helcim_invoices").update(payload).eq("id", invoiceId).select().single();
+  if (error) {
+    if (import.meta.env.DEV) console.error("[updateHelcimInvoice]", error);
+    throw error;
+  }
+  return data;
+}
+
+/** Update invoice workflow status. */
+export async function updateHelcimInvoiceStatus(invoiceId, status) {
+  const extra = {};
+  if (status === "voided") extra.voided_at = new Date().toISOString();
+  return updateHelcimInvoice(invoiceId, { status, ...extra });
+}
+
+/**
+ * Update payment status and amounts, then sync repair_orders.payment_status.
+ *
+ * repair_orders.payment_status only accepts: 'unpaid' | 'partial' | 'paid'
+ * helcim_invoices.payment_status also allows: 'refunded' | 'failed' | 'voided'
+ * Map invoice-only values to the closest valid RO value (or skip RO update).
+ */
+export async function updateHelcimPaymentStatus(invoiceId, paymentStatus, paymentData = {}) {
+  const now = new Date().toISOString();
+
+  // 1. Fetch current invoice in ONE query — repair_order_id, amounts, and all timestamps
+  const { data: curr, error: fetchErr } = await supabase
+    .from("helcim_invoices")
+    .select("repair_order_id, total_cents, amount_paid_cents")
+    .eq("id", invoiceId)
+    .single();
+
+  if (fetchErr) {
+    if (import.meta.env.DEV) console.error("[updateHelcimPaymentStatus] fetch error:", fetchErr);
+    throw fetchErr;
+  }
+
+  const totalCents = curr?.total_cents ?? 0;
+
+  // 2. Build the patch
+  const patch = { payment_status: paymentStatus };
+
+  switch (paymentStatus) {
+    case "paid":
+      patch.amount_paid_cents = totalCents;
+      patch.amount_due_cents  = 0;
+      patch.paid_at           = paymentData.paid_at ?? now;
+      break;
+
+    case "partial": {
+      const paidAmt = paymentData.amount_paid_cents ?? curr.amount_paid_cents ?? 0;
+      patch.amount_paid_cents = paidAmt;
+      patch.amount_due_cents  = Math.max(0, totalCents - paidAmt);
+      break;
+    }
+
+    case "unpaid":
+      patch.amount_paid_cents = 0;
+      patch.amount_due_cents  = totalCents;
+      patch.paid_at           = null;
+      break;
+
+    case "voided":
+      patch.voided_at         = paymentData.voided_at ?? now;
+      patch.amount_due_cents  = 0;
+      break;
+
+    case "refunded":
+    case "failed":
+      // Keep amounts as-is; only update the status field
+      break;
+
+    default:
+      if (import.meta.env.DEV) console.warn("[updateHelcimPaymentStatus] unknown status:", paymentStatus);
+  }
+
+  // 3. Update the invoice first — if this fails, we stop before touching RO
+  const updated = await updateHelcimInvoice(invoiceId, patch);
+
+  // 4. Sync repair_orders.payment_status (only valid RO values)
+  //    repair_orders constraint: payment_status in ('unpaid','partial','paid')
+  const RO_STATUS_MAP = {
+    unpaid:   "unpaid",
+    partial:  "partial",
+    paid:     "paid",
+    refunded: "partial",   // closest valid value — money was returned but RO existed
+    failed:   "unpaid",    // payment failed, treat as unpaid
+    voided:   null,        // voided invoice: do not change RO payment status
+  };
+  const roPayStatus = RO_STATUS_MAP[paymentStatus];
+
+  if (roPayStatus !== null && curr?.repair_order_id) {
+    const { error: roErr } = await supabase
+      .from("repair_orders")
+      .update({ payment_status: roPayStatus })
+      .eq("id", curr.repair_order_id);
+
+    if (roErr && import.meta.env.DEV) {
+      console.warn("[updateHelcimPaymentStatus] RO sync failed (non-fatal):", roErr);
+    }
+  }
+
+  return updated;
+}
+
+// ─────────────────────────────────────────────────────────────
 // ESTIMATES
 // ─────────────────────────────────────────────────────────────
 
