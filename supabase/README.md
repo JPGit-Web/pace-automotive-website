@@ -17,6 +17,8 @@ All migrations are run manually in the Supabase SQL Editor.
 | `004_inspections.sql` | Phase 7A | `inspections`, `inspection_items`, `inspection_photos`, `inspection-photos` storage bucket |
 | `005_estimates.sql` | Phase 8A | `estimates`, `estimate_items`, `approval_tokens`, `estimate_number_seq` |
 | `005b_estimate_service_role_grants.sql` | Phase 8C | service_role grants for estimate approval Netlify Functions |
+| `006_helcim_invoices.sql` | Phase 9A | `helcim_invoices`, `helcim_invoice_items`, `helcim_payment_events` |
+| `006b_helcim_service_role_grants.sql` | Phase 9C/9D | service_role grants for Helcim Netlify Functions |
 
 ---
 
@@ -36,6 +38,67 @@ All migrations are run manually in the Supabase SQL Editor.
 ## After Running Each Migration — Verify in Table Editor
 
 Go to **Table Editor** in the Supabase left sidebar and confirm:
+
+### After `006b_helcim_service_role_grants.sql`
+
+Run this **after** deploying Phase 9C or 9D Netlify Functions. It is safe to run earlier but the functions won't exist yet.
+
+- [ ] `service_role` has SELECT/INSERT/UPDATE on `helcim_invoices`, `helcim_invoice_items`, `helcim_payment_events`
+- [ ] `service_role` has SELECT/UPDATE on `repair_orders`
+- [ ] `service_role` has SELECT on `customers`, `vehicles`, `estimates`, `estimate_items`
+- [ ] `service_role` has INSERT on `activity_logs`
+- [ ] `anon` access remains revoked on all Helcim tables
+
+Also add these to **Netlify Environment Variables** before deploying Phase 9C/9D:
+
+| Key | Notes |
+|---|---|
+| `HELCIM_API_TOKEN` | From Helcim dashboard → Developer → API Keys |
+| `HELCIM_WEBHOOK_SECRET` | From Helcim dashboard → Settings → Webhooks |
+| `HELCIM_API_BASE_URL` | `https://api.helcim.com/v2` (or sandbox URL for testing) |
+
+---
+
+### After `006_helcim_invoices.sql`
+
+**Tables (Table Editor):**
+- [ ] `helcim_invoices` table exists with all columns
+- [ ] `helcim_invoice_items` table exists with all columns
+- [ ] `helcim_payment_events` table exists with all columns
+
+**RLS (lock icon in Table Editor):**
+- [ ] RLS enabled on `helcim_invoices`
+- [ ] RLS enabled on `helcim_invoice_items`
+- [ ] RLS enabled on `helcim_payment_events`
+
+**Policies (Authentication → Policies):**
+- [ ] `helcim_inv: authenticated users can select`
+- [ ] `helcim_inv: authenticated users can insert`
+- [ ] `helcim_inv: authenticated users can update`
+- [ ] `helcim_inv_items: authenticated users can select`
+- [ ] `helcim_inv_items: authenticated users can insert`
+- [ ] `helcim_inv_items: authenticated users can update`
+- [ ] `helcim_evt: authenticated users can select`
+- [ ] `helcim_evt: authenticated users can insert`
+- [ ] `helcim_evt: authenticated users can update`
+- [ ] No DELETE policies on any Helcim table
+- [ ] No anon policies on any Helcim table
+
+**Trigger (Database → Triggers):**
+- [ ] `trg_helcim_invoices_updated_at` on `helcim_invoices`
+- [ ] No trigger on `helcim_invoice_items` (snapshots are immutable)
+- [ ] No trigger on `helcim_payment_events` (append-only)
+
+**Verify no anon access (SQL Editor):**
+```sql
+select grantee, table_name, privilege_type
+from information_schema.role_table_grants
+where table_name in ('helcim_invoices', 'helcim_invoice_items', 'helcim_payment_events')
+  and grantee = 'anon';
+```
+Expected: zero rows.
+
+---
 
 ### After `005b_estimate_service_role_grants.sql`
 

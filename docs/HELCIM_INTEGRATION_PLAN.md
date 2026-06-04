@@ -188,3 +188,117 @@ If P.A.C.E.'s Supabase database were ever compromised, no payment data would be 
 | Phase 2 | Add Helcim webhook handler to auto-update payment status |
 | Phase 3 | Add API-based invoice creation from portal (auto-populate from estimate) |
 | Phase 4 | Explore HelcimPay.js on customer approval page for online payment |
+
+---
+
+## 10. P.A.C.E. Portal Phase 9 — Sub-Phase Breakdown
+
+The portal's Helcim integration is split into four sequential sub-phases.
+
+### Phase 9A — Database Setup (complete)
+
+**Goal:** Create the database tables to track Helcim invoices, line item snapshots, and payment events.
+
+**Migration file:** `supabase/migrations/006_helcim_invoices.sql`
+**Service role grants:** `supabase/migrations/006b_helcim_service_role_grants.sql`
+
+**Tables created:**
+- `helcim_invoices` — one record per Helcim invoice linked to a repair order
+- `helcim_invoice_items` — immutable snapshot of what was sent to Helcim
+- `helcim_payment_events` — append-only log for webhook events and manual syncs
+
+**What is NOT done yet:** No Helcim API calls, no webhooks, no frontend UI.
+
+---
+
+### Phase 9B — Staff Invoice Linking (Manual)
+
+**Goal:** Staff can manually record a Helcim invoice against a completed repair order without leaving the portal.
+
+**Frontend:** Update `src/pages/portal/PortalInvoices.jsx`
+
+**Workflow:**
+1. Staff completes a repair order and creates an invoice in the Helcim dashboard.
+2. Staff returns to the portal Invoices page (or the RO detail).
+3. Staff pastes the Helcim invoice ID, invoice number, and payment link URL.
+4. Portal creates a `helcim_invoices` row and links it to the RO.
+5. Staff shares the payment link with the customer (by email, text, or verbally).
+6. Staff can manually mark as paid, partial, or voided.
+
+**No API calls or webhooks in this phase.**
+
+---
+
+### Phase 9C — Helcim API Invoice Creation
+
+**Goal:** Portal automatically creates a Helcim invoice via the Helcim REST API when staff clicks "Create Invoice."
+
+**Netlify Function:** `netlify/functions/helcim-create-invoice.js`
+
+**Environment variables required:**
+```
+HELCIM_API_TOKEN=your_helcim_api_token
+HELCIM_API_BASE_URL=https://api.helcim.com/v2
+```
+
+**Workflow:**
+1. Staff clicks "Create Invoice in Helcim" from the portal for a completed RO.
+2. Netlify Function authenticates with Helcim API using `HELCIM_API_TOKEN`.
+3. Function builds the invoice payload from the estimate items (approved line items).
+4. Helcim creates the invoice and returns invoice ID, number, and payment URL.
+5. Portal stores the returned values in `helcim_invoices`.
+6. Staff sees the invoice number and payment link immediately in the portal.
+
+**Helcim API endpoint:** `POST /v2/invoices`
+**Authentication:** `Authorization: Bearer {HELCIM_API_TOKEN}` header
+
+**Security notes:**
+- `HELCIM_API_TOKEN` is stored in Netlify environment variables only.
+- It must never appear in `src/` or any frontend code.
+- The Netlify Function verifies the staff Supabase access token before calling Helcim.
+
+---
+
+### Phase 9D — Helcim Webhook Payment Sync
+
+**Goal:** Payment status updates automatically when Helcim confirms a transaction, without staff having to manually update the portal.
+
+**Netlify Function:** `netlify/functions/helcim-webhook.js`
+
+**Environment variables required:**
+```
+HELCIM_WEBHOOK_SECRET=your_helcim_webhook_secret
+```
+
+**Webhook events to handle:**
+- `invoice.paid`
+- `invoice.partial_payment`
+- `invoice.voided`
+- `invoice.viewed` (optional, for tracking customer engagement)
+
+**Workflow:**
+1. Customer pays via the Helcim payment link.
+2. Helcim sends a POST to `/.netlify/functions/helcim-webhook`.
+3. Function verifies the HMAC-SHA256 signature using `HELCIM_WEBHOOK_SECRET`.
+   - If invalid: return 401, do not process.
+4. Function matches the event to a `helcim_invoices` row via `helcim_invoice_id`.
+5. Inserts a row into `helcim_payment_events` (append-only, includes sanitized payload).
+6. Updates `helcim_invoices.payment_status` and `amount_paid_cents`.
+7. Updates `repair_orders.payment_status` to match.
+8. Logs to `activity_logs`.
+9. Always returns `200 OK` — Helcim retries on non-200 responses, which can cause duplicate processing.
+
+**Security notes:**
+- `raw_payload` stored in `helcim_payment_events` must be sanitized before insert.
+- Never store card numbers, CVV, expiry dates, or bank details in `raw_payload`.
+- `HELCIM_WEBHOOK_SECRET` is stored in Netlify environment variables only.
+
+---
+
+## 11. Environment Variables Reference
+
+| Variable | Used In | Notes |
+|---|---|---|
+| `HELCIM_API_TOKEN` | Netlify Functions only (`helcim-create-invoice.js`) | Never in `src/`. Set in Netlify env vars. |
+| `HELCIM_WEBHOOK_SECRET` | Netlify Functions only (`helcim-webhook.js`) | Used to verify HMAC signatures. Never in `src/`. |
+| `HELCIM_API_BASE_URL` | Netlify Functions only | Defaults to `https://api.helcim.com/v2`. Set explicitly for sandbox testing. |

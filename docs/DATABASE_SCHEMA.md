@@ -359,6 +359,82 @@ Append-only audit trail of significant actions in the portal. Never deleted.
 
 ---
 
+## Phase 13 — Planned Future Schema Additions
+
+These tables and column changes are **not yet implemented**. They are planned for Phase 13 (Post-MVP Workflow Improvements). Do not create migrations for these until Phase 13 begins.
+
+---
+
+### Planned addition: `repair_order_concerns`
+
+Replaces or supplements the single `repair_order.customer_concern` text field with a structured list. Each row represents one customer-reported concern on the repair order.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `repair_order_id` | uuid | FK → `repair_orders(id)` on delete cascade |
+| `sort_order` | integer | Display order |
+| `description` | text | Customer's reported concern (e.g. "Engine noise on startup") |
+| `cause` | text | Nullable. Technician finding for this specific concern |
+| `correction` | text | Nullable. Work done to address this concern |
+| `created_at` | timestamptz | Auto |
+| `updated_at` | timestamptz | Auto via trigger |
+
+**Notes:**
+- The existing `repair_order.customer_concern`, `cause`, and `correction` columns can coexist during migration.
+- Future inspection items and estimate line items may optionally reference a `repair_order_concern_id` for traceability.
+
+---
+
+### Planned addition: `canned_jobs`
+
+Saved job templates that staff can insert into estimates with one click.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `name` | text | Display name (e.g. "Oil Change Package") |
+| `description` | text | Nullable. Longer description or internal notes |
+| `item_type` | text | Default type: `'labor'`, `'part'`, etc. |
+| `default_price_cents` | integer | Default customer-facing price in cents |
+| `is_active` | boolean | Default true. Soft delete |
+| `sort_order` | integer | Display order in picker |
+| `created_at` | timestamptz | Auto |
+| `updated_at` | timestamptz | Auto via trigger |
+
+---
+
+### Planned addition: `canned_job_items` (optional, for bundled jobs)
+
+Sub-items within a canned job. Allows a single customer-facing line to have internal cost breakdown (e.g. "Brake Job" = labour + front pads + rotors).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `canned_job_id` | uuid | FK → `canned_jobs(id)` on delete cascade |
+| `description` | text | e.g. "Front Brake Pads" |
+| `item_type` | text | `'labor'`, `'part'`, etc. |
+| `cost_cents` | integer | Nullable. Internal cost |
+| `default_price_cents` | integer | Default customer price |
+| `sort_order` | integer | Display order |
+| `created_at` | timestamptz | Auto |
+
+---
+
+### Planned column additions: `estimate_items`
+
+Three new optional columns for cost tracking and profitability.
+
+| Column | Type | Notes |
+|---|---|---|
+| `cost_cents` | integer | Nullable. Internal cost price. Never shown to customer. |
+| `markup_percent` | numeric(5,2) | Nullable. e.g. `30.00` for 30% markup. |
+| `canned_job_id` | uuid | Nullable. FK → `canned_jobs(id)` on delete set null. Tracks which canned job generated this item. |
+
+**Security rule:** `cost_cents` and `markup_percent` must never be returned by `get-approval-estimate.js` or any customer-facing Netlify Function.
+
+---
+
 ## Relationship Diagram (Text)
 
 ```

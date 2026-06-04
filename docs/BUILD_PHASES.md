@@ -365,6 +365,171 @@ Each phase is designed to be self-contained and deployable. The public website i
 
 ---
 
+## Phase 13 — Post-MVP Workflow Improvements and Shop Usability Edits
+**Goal:** Owner-requested workflow improvements to make the portal more practical for daily shop use after the core MVP is complete. These items were identified during the build process as quality-of-life improvements that would significantly reduce friction but are not required for the initial go-live.
+
+**Dependencies:** This phase should begin only after Phases 9–11 are complete:
+- Core repair order workflow fully operational
+- Inspections and estimates in daily use
+- Helcim invoice linking in place
+- Dashboard/reporting connected to live data
+- Production security review completed
+
+---
+
+### A. New Customer Flow Inside New Repair Order
+
+**Problem:** Staff currently must leave the Repair Orders page, go to Customers to create a new customer and vehicle, then return to create the RO. This back-and-forth is disruptive mid-job.
+
+**Planned solution:**
+- Add a "New Customer" button inside the New Repair Order modal.
+- When clicked, open an inline or step-over sub-form to create a customer name, phone, and email.
+- After saving the new customer, optionally prompt to add a vehicle for that customer.
+- After vehicle is created, return to the RO modal with customer + vehicle pre-selected.
+- The full customer record should be saved to the `customers` table normally.
+
+**Design notes:**
+- Can be implemented as a multi-step modal (step 1: select or create customer, step 2: select or create vehicle, step 3: RO details).
+- Alternatively: an expandable "Create new customer" section that appears inside the existing dropdown.
+- No new tables required — uses existing `customers` and `vehicles`.
+
+---
+
+### B. Multiple Customer Concerns per Repair Order
+
+**Problem:** The single "Customer Concern" textarea on a repair order is inadequate when a customer drops off a vehicle with several unrelated issues. All concerns get mixed into one text block, making the RO harder to read and track.
+
+**Planned solution:**
+- Replace or augment the single `customer_concern` textarea with a list-style input.
+- Staff can add multiple labeled concern entries, e.g.:
+  - Concern 1: "Engine noise on startup"
+  - Concern 2: "Check engine light on"
+  - Concern 3: "Brakes squeaking at low speed"
+- Each concern can later be individually connected to inspection items, estimate line items, or cause/correction fields.
+
+**Design notes — two approaches:**
+1. **JSON/text in existing column**: Store as a JSON array in `customer_concern` (e.g., `["Engine noise", "CEL on"]`). No schema change. Simpler but less queryable.
+2. **New table `repair_order_concerns`**: A separate table with `repair_order_id`, `sort_order`, `description`, `cause`, `correction`. More structured, better for future linking to inspections/estimates. Preferred if time allows.
+
+**Future potential:** Each concern row could later link directly to inspection items and estimate line items, enabling full 3-C (concern/cause/correction) traceability per issue.
+
+---
+
+### C. Customer Service and Vehicle History View
+
+**Problem:** Staff currently have no consolidated view of a customer's or vehicle's history. To understand what work has been done, they must navigate to individual repair orders, inspections, and estimates separately.
+
+**Planned solution:**
+- Add a "History" tab or expandable section on the Customer detail page showing:
+  - All past repair orders (RO number, date, status, total)
+  - All vehicles on file
+  - All inspections linked to those ROs
+  - All estimates and their approval status
+  - All invoices and payment status
+  - Internal notes and visit dates
+- Add a similar history section to the Vehicle detail page.
+- Staff should be able to see at a glance: "This vehicle has been in 4 times, last for brakes."
+
+**Design notes:**
+- No new tables required. This is a query/display problem using existing `repair_orders`, `inspections`, `estimates`, and `invoices` tables filtered by `customer_id` or `vehicle_id`.
+- Could be rendered as a timeline or simple sorted list.
+- Consider adding a "total lifetime value" summary (sum of paid invoices per customer).
+
+---
+
+### D. Line Item Cost, Markup, and Customer Price
+
+**Problem:** The current estimate line item only has a customer-facing unit price. Staff cannot track internal cost or markup, making it impossible to calculate profitability from within the portal.
+
+**Planned solution:**
+- Add optional cost and markup fields to estimate line items:
+  - `cost_cents` — internal cost price (not shown to customer)
+  - `markup_percent` — markup applied to cost (e.g., 30%)
+  - `customer_price_cents` — final customer-facing price (auto-calculated from cost + markup, but editable)
+- The customer approval page should never show cost or markup — only the customer price.
+- Staff see all three fields in the estimate builder.
+
+**Potential schema change to `estimate_items`:**
+```sql
+cost_cents          integer null,   -- internal cost, never shown to customer
+markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
+-- unit_price_cents becomes the customer-facing price (already exists)
+```
+
+**Design notes:**
+- These are optional fields — existing estimates without cost/markup still work.
+- Profitability reports could be built in Phase 11 using these fields.
+- Do not expose `cost_cents` or `markup_percent` in any customer-facing function or approval page.
+
+---
+
+### E. Preset Jobs / Canned Jobs
+
+**Problem:** Staff frequently add the same line items to estimates (e.g., oil change, brake pads, diagnostic fee). Entering them manually every time is slow and error-prone.
+
+**Planned solution:**
+- Add a `canned_jobs` table of saved job templates.
+- Each canned job has a name, default price, and optionally sub-items.
+- From the estimate builder, staff can click "Add from canned job" to insert a pre-configured line item.
+- Examples:
+  - "Oil Change Package" → $89.99 labor + $45 oil filter (shown as one line or expanded)
+  - "Diagnostic Fee" → $120 flat
+  - "Tire Swap (seasonal)" → $80
+
+**Potential schema — new tables:**
+```sql
+-- canned_jobs
+id uuid, name text, description text, default_price_cents integer,
+item_type text, is_active boolean, sort_order integer, created_at timestamptz
+
+-- canned_job_items (optional: for bundles shown as one customer line)
+id uuid, canned_job_id uuid, description text, item_type text,
+cost_cents integer, default_price_cents integer, sort_order integer
+```
+
+**Design notes:**
+- Initially, each canned job can be a single flat-price line item (simplest to build).
+- Later, canned jobs can expand to multi-item bundles where staff see line details but customer sees one summarized line.
+- Canned jobs are shop-global, not per-customer.
+- The existing `estimate_items` table is not changed — canned jobs just pre-fill the add-item form.
+
+---
+
+### F. Horizontal Estimate Totals Display
+
+**Problem:** The current estimate totals box sits as a card in the bottom-left. As the estimate builder grows, the layout feels unbalanced and doesn't match how shop software typically presents totals.
+
+**Planned solution:**
+- Redesign the estimate totals into a horizontal bar pinned to the bottom of the estimate builder view.
+- Display in a single row (or two-row compact layout):
+  - Subtotal | GST (5%) | Total | Approved Amount
+- The bar should be visible at all times while editing without scrolling.
+- Optionally sticky to the viewport bottom when the item list is long.
+
+**Design notes:**
+- This is a frontend-only change — no database or API changes required.
+- Affects `src/pages/portal/PortalEstimates.jsx` and `src/styles/portal.css`.
+- The current `portalEstTotals` CSS class will be replaced or extended.
+
+---
+
+### Phase 13 Acceptance Criteria
+
+- [ ] Staff can create a new customer from within the New Repair Order modal without leaving the page.
+- [ ] After creating a customer in the RO modal, staff can optionally add a vehicle before completing the RO form.
+- [ ] Repair orders support multiple labeled customer concern entries (list-style, not one blob of text).
+- [ ] Customer detail page shows a history of past repair orders, inspections, estimates, and invoices.
+- [ ] Vehicle detail page shows service history for that vehicle.
+- [ ] Estimate line items optionally support cost price, markup percentage, and auto-calculated customer price.
+- [ ] Cost and markup are never shown on the customer-facing approval page.
+- [ ] Staff can insert a canned/preset job into an estimate with one action.
+- [ ] Estimate totals display in a horizontal layout at the bottom of the estimate builder.
+- [ ] All existing workflows (repair orders, inspections, estimates, approvals, invoices) continue to work unchanged.
+- [ ] No secrets are exposed in frontend code.
+- [ ] No payment or card data is stored.
+
+---
+
 ## Phase Completion Checklist
 
 | Phase | Feature | Status |
@@ -377,8 +542,9 @@ Each phase is designed to be self-contained and deployable. The public website i
 | 5 | Appointment requests | ✅ Complete |
 | 6 | Repair orders | ✅ Complete |
 | 7 | Inspections + photos | ✅ Complete |
-| 8 | Estimates + approval links | ⬜ Not started |
+| 8 | Estimates + approval links | ✅ Complete |
 | 9 | Helcim invoice (manual) | ⬜ Not started |
 | 10 | Helcim webhook (auto) | ⬜ Not started |
 | 11 | Dashboard + reporting | ⬜ Not started |
 | 12 | SMS approval links | ⬜ Not started |
+| 13 | Post-MVP workflow improvements | ⬜ Not started |

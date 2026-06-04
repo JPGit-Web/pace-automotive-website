@@ -119,8 +119,20 @@ The goal of Version 1 is a working, secure internal tool that replaces paper and
 | **Activity Log** | Internal log of key actions for accountability |
 
 ### Deferred to Future Phases
+
+**Phase 12 — SMS Approval Links:**
+- SMS/text approval links (Twilio or similar, CASL-compliant)
+
+**Phase 13 — Post-MVP Workflow Improvements (owner-requested):**
+- New Customer creation flow inside the New Repair Order modal (no page-switching)
+- Multiple customer concern entries per repair order (list-style, not one textarea)
+- Customer and vehicle service history view (consolidated past ROs, inspections, estimates, invoices)
+- Estimate line item cost price, markup percentage, and auto-calculated customer price fields
+- Preset / canned jobs for common services (oil change, brake pads, diagnostic fee, etc.)
+- Horizontal estimate totals bar at the bottom of the estimate builder
+
+**Longer-term backlog:**
 - Multiple staff accounts / role-based permissions
-- SMS/text approval links
 - Automatic Helcim invoice creation via API
 - Technician time tracking
 - Parts ordering integration
