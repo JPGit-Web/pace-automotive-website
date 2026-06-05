@@ -663,7 +663,8 @@ cost_cents integer, default_price_cents integer, sort_order integer
 | 11 | Portal polish, security hardening, production readiness | ✅ Complete |
 | 12 | SMS approval links | ⏸ Deferred — pending owner/provider decision |
 | 13A | Portal UI + session usability (logo, layout, inactivity, pw toggle) | ✅ Complete |
-| 13B+ | Workflow improvements (new customer in RO, concerns, history, pricing, canned jobs) | ⬜ Not started |
+| 13B | Repair order intake: inline new customer + inline new vehicle + multiple concerns | ✅ Complete |
+| 13C+ | Remaining workflow improvements (history, pricing, canned jobs) | ⬜ Not started |
 
 ---
 

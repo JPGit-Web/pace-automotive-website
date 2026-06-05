@@ -189,6 +189,76 @@ export async function softDeleteVehicle(vehicleId) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// REPAIR ORDER CONCERNS (Phase 13B)
+// ─────────────────────────────────────────────────────────────
+
+/** Fetch active concerns for a repair order, ordered by sort_order. */
+export async function listRepairOrderConcerns(repairOrderId) {
+  const { data, error } = await supabase
+    .from("repair_order_concerns")
+    .select("id, concern_text, sort_order, created_at")
+    .eq("repair_order_id", repairOrderId)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Insert a single concern row. */
+export async function createRepairOrderConcern(repairOrderId, { concern_text, sort_order = 0 }) {
+  const { data, error } = await supabase
+    .from("repair_order_concerns")
+    .insert([{ repair_order_id: repairOrderId, concern_text, sort_order }])
+    .select()
+    .single();
+  if (error) {
+    if (import.meta.env.DEV) console.error("[createRepairOrderConcern]", error);
+    throw error;
+  }
+  return data;
+}
+
+/** Bulk-insert multiple concern rows for a new RO. */
+export async function bulkCreateRepairOrderConcerns(repairOrderId, texts = []) {
+  const rows = texts
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((concern_text, i) => ({ repair_order_id: repairOrderId, concern_text, sort_order: i }));
+  if (!rows.length) return [];
+  const { data, error } = await supabase
+    .from("repair_order_concerns").insert(rows).select();
+  if (error) {
+    if (import.meta.env.DEV) console.error("[bulkCreateRepairOrderConcerns]", error);
+    throw error;
+  }
+  return data ?? [];
+}
+
+/** Update the text of an existing concern. */
+export async function updateRepairOrderConcern(id, { concern_text }) {
+  const { data, error } = await supabase
+    .from("repair_order_concerns")
+    .update({ concern_text })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/** Soft-hide a concern (is_active = false). */
+export async function softHideRepairOrderConcern(id) {
+  const { data, error } = await supabase
+    .from("repair_order_concerns")
+    .update({ is_active: false })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ─────────────────────────────────────────────────────────────
 // REPAIR ORDERS
 // ─────────────────────────────────────────────────────────────
 

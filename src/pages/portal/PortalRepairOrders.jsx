@@ -4,10 +4,12 @@ import PortalLayout from "../../components/portal/PortalLayout";
 import {
   listRepairOrders, getRepairOrder, createRepairOrder,
   updateRepairOrder, updateRepairOrderStatus,
-  listCustomers, listVehiclesByCustomer, logActivity,
+  listCustomers, createCustomer, listVehiclesByCustomer, createVehicle, logActivity,
   getInspectionByRepairOrder, createInspectionForRepairOrder, createDefaultInspectionItems,
   getEstimateByRepairOrder, createEstimateForRepairOrder,
   getHelcimInvoiceByRepairOrder, createManualHelcimInvoice,
+  listRepairOrderConcerns, bulkCreateRepairOrderConcerns,
+  createRepairOrderConcern, updateRepairOrderConcern, softHideRepairOrderConcern,
 } from "../../lib/portalData";
 
 /* ── Constants ─────────────────────────────────────────────── */
@@ -120,6 +122,22 @@ export default function PortalRepairOrders() {
   const [allCustomers,    setAllCustomers]    = useState([]);
   const [custVehicles,    setCustVehicles]    = useState([]);
   const [custLoading,     setCustLoading]     = useState(false);
+  // Inline new customer (Part A)
+  const [showInlineCust,  setShowInlineCust]  = useState(false);
+  const [newCustForm,     setNewCustForm]     = useState({ first_name:"",last_name:"",phone:"",email:"",province:"AB",notes:"" });
+  const [newCustErrors,   setNewCustErrors]   = useState({});
+  const [newCustSaving,   setNewCustSaving]   = useState(false);
+  // Inline new vehicle (Part A extended)
+  const [showInlineVeh,   setShowInlineVeh]   = useState(false);
+  const [newVehForm,      setNewVehForm]      = useState({ year:"",make:"",model:"",trim:"",color:"",vin:"",license_plate:"",plate_province:"AB",notes:"" });
+  const [newVehErrors,    setNewVehErrors]    = useState({});
+  const [newVehSaving,    setNewVehSaving]    = useState(false);
+  // Concerns — create modal (Part B)
+  const [createConcerns,  setCreateConcerns]  = useState([{ id:"c0", text:"" }]);
+  // Concerns — edit modal (Part B)
+  const [editConcerns,    setEditConcerns]    = useState([]); // { id, text, isNew, hidden }
+  // Concerns — detail view (Part B)
+  const [roConcerns,      setRoConcerns]      = useState([]);
   // Inspection state for current RO
   const [roInspection,    setRoInspection]    = useState(null);
   const [inspLoading,     setInspLoading]     = useState(false);
@@ -149,16 +167,25 @@ export default function PortalRepairOrders() {
     setRoEstimate(null);
     setRoInvoice(null);
     try {
-      const [detail, insp, est, inv] = await Promise.all([
+      const [detail, insp, est, inv, concerns] = await Promise.all([
         getRepairOrder(ro.id),
         getInspectionByRepairOrder(ro.id).catch(() => null),
         getEstimateByRepairOrder(ro.id).catch(() => null),
         getHelcimInvoiceByRepairOrder(ro.id).catch(() => null),
+        listRepairOrderConcerns(ro.id).catch(() => []),
       ]);
       setDetailData(detail);
       setRoInspection(insp);
       setRoEstimate(est);
       setRoInvoice(inv);
+      // Fall back to customer_concern if no structured rows yet
+      if (concerns.length > 0) {
+        setRoConcerns(concerns);
+      } else if (detail?.customer_concern) {
+        setRoConcerns([{ id: null, concern_text: detail.customer_concern }]);
+      } else {
+        setRoConcerns([]);
+      }
     } catch (err) {
       if (import.meta.env.DEV) console.error("[PortalRepairOrders] detail load failed:", err);
       setDetailData(null);
@@ -274,8 +301,14 @@ export default function PortalRepairOrders() {
     setFormErrors({});
     setSaveError("");
     setCustVehicles([]);
+    setCreateConcerns([{ id: "c0", text: "" }]);
+    setShowInlineCust(false);
+    setNewCustForm({ first_name:"",last_name:"",phone:"",email:"",province:"AB",notes:"" });
+    setNewCustErrors({});
+    setShowInlineVeh(false);
+    setNewVehForm({ year:"",make:"",model:"",trim:"",color:"",vin:"",license_plate:"",plate_province:"AB",notes:"" });
+    setNewVehErrors({});
     setModal("create");
-    // Load customers
     setCustLoading(true);
     try { setAllCustomers(await listCustomers()); }
     catch { setAllCustomers([]); }
@@ -296,6 +329,14 @@ export default function PortalRepairOrders() {
       internal_notes:   detailData.internal_notes ?? "",
       payment_status:   detailData.payment_status ?? "unpaid",
     });
+    // Populate edit concerns from loaded roConcerns
+    if (roConcerns.length > 0) {
+      setEditConcerns(roConcerns.map((c) => ({
+        id: c.id, text: c.concern_text ?? "", isNew: false, hidden: false,
+      })));
+    } else {
+      setEditConcerns([{ id: `new-${Date.now()}`, text: "", isNew: true, hidden: false }]);
+    }
     setFormErrors({});
     setSaveError("");
     setModal("edit");
@@ -317,9 +358,135 @@ export default function PortalRepairOrders() {
     const id = e.target.value;
     setFormData((p) => ({ ...p, customer_id: id, vehicle_id: "" }));
     setCustVehicles([]);
+    setShowInlineVeh(false);
+    setNewVehErrors({});
     if (!id) return;
     try { setCustVehicles(await listVehiclesByCustomer(id)); }
     catch { setCustVehicles([]); }
+  }
+
+  /* ── Inline new customer (Part A) ── */
+  function handleNewCustField(e) {
+    const { name, value } = e.target;
+    setNewCustForm((p) => ({ ...p, [name]: value }));
+    if (newCustErrors[name]) setNewCustErrors((p) => ({ ...p, [name]: "" }));
+  }
+
+  async function handleCreateInlineCustomer() {
+    const errors = {};
+    if (!newCustForm.first_name.trim() && !newCustForm.last_name.trim())
+      errors.name = "Enter at least a first or last name.";
+    if (newCustForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCustForm.email.trim()))
+      errors.email = "Enter a valid email.";
+    if (Object.keys(errors).length) { setNewCustErrors(errors); return; }
+
+    setNewCustSaving(true);
+    try {
+      const payload = {
+        first_name:        newCustForm.first_name.trim() || null,
+        last_name:         newCustForm.last_name.trim()  || null,
+        phone:             newCustForm.phone.trim()      || null,
+        email:             newCustForm.email.trim()      || null,
+        notes:             newCustForm.notes.trim()      || null,
+        province:          newCustForm.province          || "AB",  // required NOT NULL
+        preferred_contact: "phone",
+      };
+      const newCust = await createCustomer(payload);
+      await logActivity("customer.created", "customer", newCust.id, {
+        name: `${newCust.first_name ?? ""} ${newCust.last_name ?? ""}`.trim(),
+        from: "inline_ro_create",
+      });
+      // Refresh customer list and auto-select the new customer
+      const updated = await listCustomers();
+      setAllCustomers(updated);
+      setFormData((p) => ({ ...p, customer_id: newCust.id, vehicle_id: "" }));
+      setCustVehicles([]);
+      setShowInlineCust(false);
+      setNewCustForm({ first_name:"",last_name:"",phone:"",email:"",province:"AB",notes:"" });
+      setNewCustErrors({});
+    } catch (err) {
+      const msg = err?.message?.includes("not-null")
+        ? "A required field is missing. Check all fields and try again."
+        : err?.message ?? "Failed to create customer. Please try again.";
+      setNewCustErrors({ name: msg });
+    } finally {
+      setNewCustSaving(false);
+    }
+  }
+
+  /* ── Inline new vehicle ── */
+  function handleNewVehField(e) {
+    const { name, value } = e.target;
+    setNewVehForm((p) => ({ ...p, [name]: value }));
+    if (newVehErrors[name]) setNewVehErrors((p) => ({ ...p, [name]: "" }));
+  }
+
+  async function handleCreateInlineVehicle() {
+    const errors = {};
+    if (!formData.customer_id) {
+      errors.general = "Select a customer before adding a vehicle.";
+    }
+    if (!newVehForm.make.trim())  errors.make  = "Make is required.";
+    if (!newVehForm.model.trim()) errors.model = "Model is required.";
+    if (newVehForm.year && (isNaN(+newVehForm.year) || +newVehForm.year < 1900 || +newVehForm.year > 2100))
+      errors.year = "Year must be between 1900 and 2100.";
+    if (newVehForm.vin.trim() && newVehForm.vin.trim().length > 17)
+      errors.vin = "VIN must be 17 characters or less.";
+    if (Object.keys(errors).length) { setNewVehErrors(errors); return; }
+
+    setNewVehSaving(true);
+    try {
+      const veh = await createVehicle({
+        customer_id:    formData.customer_id,
+        year:           newVehForm.year ? parseInt(newVehForm.year, 10) : null,
+        make:           newVehForm.make.trim(),
+        model:          newVehForm.model.trim(),
+        trim:           newVehForm.trim.trim()           || null,
+        color:          newVehForm.color.trim()          || null,
+        vin:            newVehForm.vin.trim()             || null,
+        license_plate:  newVehForm.license_plate.trim()  || null,
+        plate_province: newVehForm.plate_province        || "AB",
+        notes:          newVehForm.notes.trim()          || null,
+      });
+      await logActivity("vehicle.created", "vehicle", veh.id, {
+        make: veh.make, model: veh.model, from: "inline_ro_create",
+      });
+      // Refresh vehicle list and auto-select the new vehicle
+      const updated = await listVehiclesByCustomer(formData.customer_id);
+      setCustVehicles(updated);
+      setFormData((p) => ({ ...p, vehicle_id: veh.id }));
+      setShowInlineVeh(false);
+      setNewVehForm({ year:"",make:"",model:"",trim:"",color:"",vin:"",license_plate:"",plate_province:"AB",notes:"" });
+      setNewVehErrors({});
+    } catch (err) {
+      const msg = err?.message?.includes("not-null")
+        ? "A required field is missing. Check all fields and try again."
+        : err?.message ?? "Failed to create vehicle. Please try again.";
+      setNewVehErrors({ general: msg });
+    } finally {
+      setNewVehSaving(false);
+    }
+  }
+
+  /* ── Concern helpers (Part B) ── */
+  function addCreateConcern() {
+    setCreateConcerns((p) => [...p, { id: `c${Date.now()}`, text: "" }]);
+  }
+  function removeCreateConcern(id) {
+    setCreateConcerns((p) => p.length > 1 ? p.filter((c) => c.id !== id) : p);
+  }
+  function updateCreateConcern(id, text) {
+    setCreateConcerns((p) => p.map((c) => c.id === id ? { ...c, text } : c));
+  }
+
+  function addEditConcern() {
+    setEditConcerns((p) => [...p, { id: `new-${Date.now()}`, text: "", isNew: true, hidden: false }]);
+  }
+  function hideEditConcern(id) {
+    setEditConcerns((p) => p.map((c) => c.id === id ? { ...c, hidden: true } : c));
+  }
+  function updateEditConcern(id, text) {
+    setEditConcerns((p) => p.map((c) => c.id === id ? { ...c, text } : c));
   }
 
   /* ── Save create ── */
@@ -329,18 +496,28 @@ export default function PortalRepairOrders() {
     if (Object.keys(errors).length) { setFormErrors(errors); return; }
     setSaving(true); setSaveError("");
     try {
+      const activeConcerns = createConcerns.map((c) => c.text.trim()).filter(Boolean);
+      const firstConcern   = activeConcerns[0] ?? null;
       const ro = await createRepairOrder({
         ...formData,
-        mileage_in: formData.mileage_in ? parseInt(formData.mileage_in, 10) : null,
+        mileage_in:       formData.mileage_in ? parseInt(formData.mileage_in, 10) : null,
+        customer_concern: firstConcern, // backwards compat
       });
+      // Save structured concern rows
+      if (activeConcerns.length > 0) {
+        await bulkCreateRepairOrderConcerns(ro.id, activeConcerns).catch(() => {});
+      }
       await logActivity("repair_order.created", "repair_order", ro.id, {
-        ro_number: ro.ro_number,
+        ro_number: ro.ro_number, concern_count: activeConcerns.length,
       });
-      // Fetch the full list-display row (with customer/vehicle names) then refresh
       closeModal();
-      await load(); // reload the full list so the new RO shows with customer/vehicle
+      await load();
       setSelected(ro);
-      setDetailData(await getRepairOrder(ro.id));
+      const detail = await getRepairOrder(ro.id);
+      setDetailData(detail);
+      const concerns = await listRepairOrderConcerns(ro.id).catch(() => []);
+      setRoConcerns(concerns.length > 0 ? concerns
+        : (detail?.customer_concern ? [{ id: null, concern_text: detail.customer_concern }] : []));
     } catch { setSaveError("Failed to create repair order. Please try again."); }
     finally { setSaving(false); }
   }
@@ -350,15 +527,43 @@ export default function PortalRepairOrders() {
     e.preventDefault();
     setSaving(true); setSaveError("");
     try {
+      const activeConcerns = editConcerns.filter((c) => !c.hidden && c.text.trim());
+      const firstConcern   = activeConcerns[0]?.text.trim() ?? null;
+
       const updated = await updateRepairOrder(selected.id, {
         ...formData,
-        mileage_in:  formData.mileage_in  ? parseInt(formData.mileage_in, 10)  : null,
-        mileage_out: formData.mileage_out ? parseInt(formData.mileage_out, 10) : null,
+        mileage_in:       formData.mileage_in  ? parseInt(formData.mileage_in, 10)  : null,
+        mileage_out:      formData.mileage_out ? parseInt(formData.mileage_out, 10) : null,
+        customer_concern: firstConcern,
       });
+
+      // Process concern changes
+      for (const c of editConcerns) {
+        if (c.hidden && !c.isNew && c.id) {
+          await softHideRepairOrderConcern(c.id).catch(() => {});
+        } else if (c.isNew && !c.hidden && c.text.trim()) {
+          await createRepairOrderConcern(selected.id, {
+            concern_text: c.text.trim(),
+            sort_order: editConcerns.indexOf(c),
+          }).catch(() => {});
+        } else if (!c.isNew && !c.hidden && c.id && c.text.trim()) {
+          // Update existing if text changed
+          const original = roConcerns.find((r) => r.id === c.id);
+          if (original && original.concern_text !== c.text.trim()) {
+            await updateRepairOrderConcern(c.id, { concern_text: c.text.trim() }).catch(() => {});
+          }
+        }
+      }
+
       await logActivity("repair_order.updated", "repair_order", selected.id, {
         ro_number: selected.ro_number,
       });
-      // Refresh list entry
+
+      // Refresh concerns in detail view
+      const freshConcerns = await listRepairOrderConcerns(selected.id).catch(() => []);
+      setRoConcerns(freshConcerns.length > 0 ? freshConcerns
+        : (firstConcern ? [{ id: null, concern_text: firstConcern }] : []));
+
       setRos((p) => p.map((r) => r.id === updated.id
         ? { ...r, status: updated.status, payment_status: updated.payment_status, promised_date: updated.promised_date }
         : r
@@ -532,12 +737,38 @@ export default function PortalRepairOrders() {
                 </div>
               </div>
 
-              {/* 3-C fields */}
+              {/* 3-C fields — Customer Concerns use structured rows */}
               <div className="portalRODetailSection">
                 <p className="portalROSectionTitle">Job Details</p>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"12px" }}>
-                  {[["Customer Concern", detailData.customer_concern],
-                    ["Cause",           detailData.cause],
+
+                {/* Customer Concerns (multi-row) */}
+                <div style={{ marginBottom:"12px" }}>
+                  <div className="portalDetailLabel" style={{ marginBottom:"6px" }}>
+                    Customer Concerns
+                    {roConcerns.length > 1 && (
+                      <span style={{ marginLeft:6, fontSize:".7rem", color:"var(--p-text-3)" }}>
+                        ({roConcerns.length})
+                      </span>
+                    )}
+                  </div>
+                  {roConcerns.length === 0 ? (
+                    <div className="portalROTextField empty">Not provided</div>
+                  ) : (
+                    <div className="portalConcernDetail">
+                      {roConcerns.map((c, i) => (
+                        <div key={c.id ?? i} className="portalConcernDetailItem">
+                          {roConcerns.length > 1 && (
+                            <span className="portalConcernDetailNum">{i + 1}.</span>
+                          )}
+                          <span>{c.concern_text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
+                  {[["Cause",           detailData.cause],
                     ["Correction",      detailData.correction]].map(([lbl, val]) => (
                     <div key={lbl}>
                       <div className="portalDetailLabel">{lbl}</div>
@@ -641,9 +872,18 @@ export default function PortalRepairOrders() {
               <div className="portalModalBody">
                 {saveError && <div className="portalModalError">{saveError}</div>}
                 <div className="portalForm">
-                  {/* Customer */}
+                  {/* Customer + inline new customer */}
                   <div className="portalFormField">
-                    <label className="portalFormLabel">Customer<span className="req">*</span></label>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"5px" }}>
+                      <label className="portalFormLabel" style={{ margin:0 }}>Customer<span className="req">*</span></label>
+                      {!showInlineCust && (
+                        <button type="button"
+                          style={{ background:"none", border:"none", cursor:"pointer", fontSize:".78rem", fontWeight:600, color:"var(--p-navy)", fontFamily:"inherit", padding:"0 2px" }}
+                          onClick={() => setShowInlineCust(true)}>
+                          <i className="fa-solid fa-plus" style={{ marginRight:4 }}></i>New Customer
+                        </button>
+                      )}
+                    </div>
                     {custLoading ? (
                       <p style={{ fontSize:".83rem", color:"var(--p-text-3)" }}>Loading customers…</p>
                     ) : (
@@ -656,21 +896,90 @@ export default function PortalRepairOrders() {
                       </select>
                     )}
                     {formErrors.customer_id && <p className="portalFormFieldError">{formErrors.customer_id}</p>}
+
+                    {/* Inline new customer sub-form */}
+                    {showInlineCust && (
+                      <div className="portalInlineCustForm">
+                        <p className="portalInlineCustTitle">
+                          <i className="fa-solid fa-user-plus" style={{ color:"var(--p-navy)" }}></i>
+                          New Customer
+                        </p>
+                        {newCustErrors.name && <div className="portalModalError" style={{ marginBottom:8 }}>{newCustErrors.name}</div>}
+                        <div className="portalFormRow">
+                          <div className="portalFormField">
+                            <label className="portalFormLabel">First Name</label>
+                            <input className="portalFormInput" type="text" name="first_name"
+                              value={newCustForm.first_name} onChange={handleNewCustField} placeholder="First" autoFocus />
+                          </div>
+                          <div className="portalFormField">
+                            <label className="portalFormLabel">Last Name</label>
+                            <input className="portalFormInput" type="text" name="last_name"
+                              value={newCustForm.last_name} onChange={handleNewCustField} placeholder="Last" />
+                          </div>
+                        </div>
+                        <div className="portalFormRow">
+                          <div className="portalFormField">
+                            <label className="portalFormLabel">Phone</label>
+                            <input className="portalFormInput" type="tel" name="phone"
+                              value={newCustForm.phone} onChange={handleNewCustField} />
+                          </div>
+                          <div className="portalFormField">
+                            <label className="portalFormLabel">Email</label>
+                            <input className={`portalFormInput${newCustErrors.email ? " invalid" : ""}`}
+                              type="email" name="email"
+                              value={newCustForm.email} onChange={handleNewCustField} />
+                            {newCustErrors.email && <p className="portalFormFieldError">{newCustErrors.email}</p>}
+                          </div>
+                        </div>
+                        <div className="portalFormField">
+                          <label className="portalFormLabel">Province</label>
+                          <select className="portalFormSelect" name="province"
+                            value={newCustForm.province} onChange={handleNewCustField}>
+                            {["AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT"].map((p) => (
+                              <option key={p} value={p}>{p}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div style={{ display:"flex", gap:"8px", marginTop:"10px" }}>
+                          <button type="button" className="portalBtn portalBtnPrimary"
+                            style={{ fontSize:".82rem", padding:"8px 16px" }}
+                            onClick={handleCreateInlineCustomer} disabled={newCustSaving}>
+                            {newCustSaving ? "Creating…" : "Create & Select"}
+                          </button>
+                          <button type="button" className="portalBtn portalBtnSecondary"
+                            style={{ fontSize:".82rem", padding:"8px 16px" }}
+                            onClick={() => { setShowInlineCust(false); setNewCustErrors({}); }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Vehicle */}
+                  {/* Vehicle + inline new vehicle */}
                   <div className="portalFormField">
-                    <label className="portalFormLabel">Vehicle<span className="req">*</span></label>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"5px" }}>
+                      <label className="portalFormLabel" style={{ margin:0 }}>Vehicle<span className="req">*</span></label>
+                      {formData.customer_id && !showInlineVeh && (
+                        <button type="button"
+                          style={{ background:"none", border:"none", cursor:"pointer", fontSize:".78rem", fontWeight:600, color:"var(--p-navy)", fontFamily:"inherit", padding:"0 2px" }}
+                          onClick={() => setShowInlineVeh(true)}>
+                          <i className="fa-solid fa-plus" style={{ marginRight:4 }}></i>New Vehicle
+                        </button>
+                      )}
+                    </div>
                     {!formData.customer_id ? (
-                      <p className="portalSelectorNote">Select a customer first to load their vehicles.</p>
-                    ) : custVehicles.length === 0 ? (
+                      <p className="portalSelectorNote">Select or create a customer first.</p>
+                    ) : custVehicles.length === 0 && !showInlineVeh ? (
                       <p className="portalSelectorNote">
-                        This customer has no vehicles on file.
-                        <a href="/portal/customers" style={{ color:"var(--p-navy)", marginLeft:6, fontWeight:600 }}>
-                          Add a vehicle from the Customers page.
-                        </a>
+                        No vehicles on file.
+                        <button type="button"
+                          style={{ background:"none", border:"none", cursor:"pointer", fontSize:".82rem", fontWeight:600, color:"var(--p-navy)", fontFamily:"inherit", marginLeft:6, padding:0 }}
+                          onClick={() => setShowInlineVeh(true)}>
+                          + Add a vehicle now
+                        </button>
                       </p>
-                    ) : (
+                    ) : !showInlineVeh ? (
                       <select className={`portalFormSelect${formErrors.vehicle_id ? " invalid" : ""}`}
                         name="vehicle_id" value={formData.vehicle_id} onChange={handleField}>
                         <option value="">— Select vehicle —</option>
@@ -678,8 +987,84 @@ export default function PortalRepairOrders() {
                           <option key={v.id} value={v.id}>{[v.year, v.make, v.model].filter(Boolean).join(" ")}{v.license_plate ? ` — ${v.license_plate}` : ""}</option>
                         ))}
                       </select>
-                    )}
+                    ) : null}
                     {formErrors.vehicle_id && <p className="portalFormFieldError">{formErrors.vehicle_id}</p>}
+
+                    {/* Inline new vehicle sub-form */}
+                    {showInlineVeh && (
+                      <div className="portalInlineCustForm">
+                        <p className="portalInlineCustTitle">
+                          <i className="fa-solid fa-car" style={{ color:"var(--p-navy)" }}></i>
+                          New Vehicle
+                        </p>
+                        {newVehErrors.general && <div className="portalModalError" style={{ marginBottom:8 }}>{newVehErrors.general}</div>}
+                        <div className="portalFormRow">
+                          <div className="portalFormField">
+                            <label className="portalFormLabel">Year</label>
+                            <input className={`portalFormInput${newVehErrors.year ? " invalid" : ""}`}
+                              type="number" name="year" min="1900" max="2100"
+                              value={newVehForm.year} onChange={handleNewVehField} placeholder="e.g. 2019" autoFocus />
+                            {newVehErrors.year && <p className="portalFormFieldError">{newVehErrors.year}</p>}
+                          </div>
+                          <div className="portalFormField">
+                            <label className="portalFormLabel">Color</label>
+                            <input className="portalFormInput" type="text" name="color"
+                              value={newVehForm.color} onChange={handleNewVehField} placeholder="e.g. White" />
+                          </div>
+                        </div>
+                        <div className="portalFormRow">
+                          <div className="portalFormField">
+                            <label className="portalFormLabel">Make<span className="req">*</span></label>
+                            <input className={`portalFormInput${newVehErrors.make ? " invalid" : ""}`}
+                              type="text" name="make"
+                              value={newVehForm.make} onChange={handleNewVehField} placeholder="e.g. Toyota" />
+                            {newVehErrors.make && <p className="portalFormFieldError">{newVehErrors.make}</p>}
+                          </div>
+                          <div className="portalFormField">
+                            <label className="portalFormLabel">Model<span className="req">*</span></label>
+                            <input className={`portalFormInput${newVehErrors.model ? " invalid" : ""}`}
+                              type="text" name="model"
+                              value={newVehForm.model} onChange={handleNewVehField} placeholder="e.g. Camry" />
+                            {newVehErrors.model && <p className="portalFormFieldError">{newVehErrors.model}</p>}
+                          </div>
+                        </div>
+                        <div className="portalFormRow">
+                          <div className="portalFormField">
+                            <label className="portalFormLabel">License Plate</label>
+                            <input className="portalFormInput" type="text" name="license_plate"
+                              value={newVehForm.license_plate} onChange={handleNewVehField} placeholder="e.g. ABC 1234" />
+                          </div>
+                          <div className="portalFormField">
+                            <label className="portalFormLabel">Province</label>
+                            <select className="portalFormSelect" name="plate_province"
+                              value={newVehForm.plate_province} onChange={handleNewVehField}>
+                              {["AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT"].map((p) => (
+                                <option key={p} value={p}>{p}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="portalFormField">
+                          <label className="portalFormLabel">VIN <span style={{ fontSize:".72rem", color:"var(--p-text-3)", fontWeight:400 }}>(optional, max 17 chars)</span></label>
+                          <input className={`portalFormInput${newVehErrors.vin ? " invalid" : ""}`}
+                            type="text" name="vin"
+                            value={newVehForm.vin} onChange={handleNewVehField} />
+                          {newVehErrors.vin && <p className="portalFormFieldError">{newVehErrors.vin}</p>}
+                        </div>
+                        <div style={{ display:"flex", gap:"8px", marginTop:"10px" }}>
+                          <button type="button" className="portalBtn portalBtnPrimary"
+                            style={{ fontSize:".82rem", padding:"8px 16px" }}
+                            onClick={handleCreateInlineVehicle} disabled={newVehSaving}>
+                            {newVehSaving ? "Adding…" : "Add & Select Vehicle"}
+                          </button>
+                          <button type="button" className="portalBtn portalBtnSecondary"
+                            style={{ fontSize:".82rem", padding:"8px 16px" }}
+                            onClick={() => { setShowInlineVeh(false); setNewVehErrors({}); }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="portalFormRow">
@@ -689,12 +1074,37 @@ export default function PortalRepairOrders() {
                       value={formData.promised_date} onChange={handleField} />
                   </div>
 
+                  {/* Multi-concern list */}
                   <div className="portalFormField">
-                    <label className="portalFormLabel">Customer Concern</label>
-                    <textarea className="portalFormTextarea" name="customer_concern" rows={2}
-                      placeholder="What did the customer report?"
-                      value={formData.customer_concern} onChange={handleField} />
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"5px" }}>
+                      <label className="portalFormLabel" style={{ margin:0 }}>Customer Concerns</label>
+                      <button type="button"
+                        style={{ background:"none", border:"none", cursor:"pointer", fontSize:".78rem", fontWeight:600, color:"var(--p-navy)", fontFamily:"inherit", padding:"0 2px" }}
+                        onClick={addCreateConcern}>
+                        <i className="fa-solid fa-plus" style={{ marginRight:4 }}></i>Add Concern
+                      </button>
+                    </div>
+                    <div className="portalConcernList">
+                      {createConcerns.map((c, i) => (
+                        <div key={c.id} className="portalConcernRow">
+                          {createConcerns.length > 1 && (
+                            <span className="portalConcernNumber">{i + 1}.</span>
+                          )}
+                          <input className="portalFormInput" type="text"
+                            placeholder={i === 0 ? "What did the customer report?" : `Concern ${i + 1}…`}
+                            value={c.text}
+                            onChange={(e) => updateCreateConcern(c.id, e.target.value)} />
+                          {createConcerns.length > 1 && (
+                            <button type="button" className="portalBtnIcon danger"
+                              onClick={() => removeCreateConcern(c.id)} title="Remove concern">
+                              <i className="fa-solid fa-xmark"></i>
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
+
                   <div className="portalFormField">
                     <label className="portalFormLabel">Internal Notes</label>
                     <textarea className="portalFormTextarea" name="internal_notes" rows={2}
@@ -747,8 +1157,36 @@ export default function PortalRepairOrders() {
                     <Field label="Mileage Out (km)" name="mileage_out" type="number" value={formData.mileage_out} onChange={handleField} />
                   </div>
                   <Field label="Promised Date" name="promised_date" type="date" value={formData.promised_date} onChange={handleField} />
+                  {/* Multi-concern list in edit modal */}
+                  <div className="portalFormField">
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"5px" }}>
+                      <label className="portalFormLabel" style={{ margin:0 }}>Customer Concerns</label>
+                      <button type="button"
+                        style={{ background:"none", border:"none", cursor:"pointer", fontSize:".78rem", fontWeight:600, color:"var(--p-navy)", fontFamily:"inherit", padding:"0 2px" }}
+                        onClick={addEditConcern}>
+                        <i className="fa-solid fa-plus" style={{ marginRight:4 }}></i>Add Concern
+                      </button>
+                    </div>
+                    <div className="portalConcernList">
+                      {editConcerns.filter((c) => !c.hidden).map((c, i) => (
+                        <div key={c.id} className="portalConcernRow">
+                          <input className="portalFormInput" type="text"
+                            placeholder={`Concern ${i + 1}…`}
+                            value={c.text}
+                            onChange={(e) => updateEditConcern(c.id, e.target.value)} />
+                          <button type="button" className="portalBtnIcon danger"
+                            onClick={() => hideEditConcern(c.id)} title="Remove concern">
+                            <i className="fa-solid fa-xmark"></i>
+                          </button>
+                        </div>
+                      ))}
+                      {editConcerns.filter((c) => !c.hidden).length === 0 && (
+                        <p style={{ fontSize:".82rem", color:"var(--p-text-3)", margin:0 }}>No concerns. Click Add Concern.</p>
+                      )}
+                    </div>
+                  </div>
+
                   {[
-                    ["Customer Concern", "customer_concern", "What did the customer report?"],
                     ["Cause",            "cause",            "What did the technician find?"],
                     ["Correction",       "correction",       "What was done to fix it?"],
                     ["Internal Notes",   "internal_notes",   "Staff-only notes…"],
