@@ -130,6 +130,10 @@ The goal of Version 1 is a working, secure internal tool that replaces paper and
 - Estimate line item cost price, markup percentage, and auto-calculated customer price fields
 - Preset / canned jobs for common services (oil change, brake pads, diagnostic fee, etc.)
 - Horizontal estimate totals bar at the bottom of the estimate builder
+- Staff portal logo upgrade — replace text-only branding with the real P.A.C.E. logo in the sidebar
+- Full-width portal layout — portal content uses more available window width on large screens
+- Inactivity auto sign-out — portal signs out staff after 10 minutes of no activity with a warning modal
+- Sign-in password visibility toggle — eye icon to show/hide password on the login screen
 
 **Longer-term backlog:**
 - Multiple staff accounts / role-based permissions

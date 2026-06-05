@@ -1431,3 +1431,120 @@ export async function logActivity(action, entityType, entityId, details = null) 
     // Intentionally silent — logging failure should never surface to the user
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// DASHBOARD
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Load all data needed for the portal dashboard in parallel.
+ * Uses the authenticated frontend Supabase client — no service role key.
+ */
+export async function fetchDashboardData() {
+  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
+  const [
+    pendingAppts,
+    activeROsRes,
+    overdueROsRes,
+    inspectionsRes,
+    sentEstimatesRes,
+    approvedEstimatesRes,
+    unpaidInvoicesRes,
+    syncErrorsRes,
+    recentActivityRes,
+    allROStatusesRes,
+  ] = await Promise.all([
+    // Pending appointment requests count
+    supabase.from("appointment_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+
+    // Active repair orders (for list + count)
+    supabase.from("repair_orders")
+      .select(`id, ro_number, status, promised_date,
+        customers (first_name, last_name),
+        vehicles  (year, make, model)`)
+      .in("status", ["active","in_progress","waiting_approval","approved"])
+      .order("created_at", { ascending: false })
+      .limit(8),
+
+    // Promised ROs that are overdue (promised_date today or earlier, not done)
+    supabase.from("repair_orders")
+      .select(`id, ro_number, status, promised_date,
+        customers (first_name, last_name),
+        vehicles  (year, make, model)`)
+      .lte("promised_date", today)
+      .not("promised_date", "is", null)
+      .not("status", "in", "(completed,closed,cancelled,invoiced)")
+      .order("promised_date", { ascending: true })
+      .limit(5),
+
+    // In-progress inspections count
+    supabase.from("inspections")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["draft","in_progress"]),
+
+    // Sent estimates (waiting customer approval)
+    supabase.from("estimates")
+      .select(`id, estimate_number, status, total_cents, sent_at,
+        repair_orders (ro_number)`)
+      .eq("status", "sent")
+      .order("sent_at", { ascending: true })
+      .limit(5),
+
+    // Approved estimates count
+    supabase.from("estimates")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["approved","partially_approved"]),
+
+    // Unpaid / partial invoices
+    supabase.from("helcim_invoices")
+      .select(`id, helcim_invoice_number, payment_status, total_cents, amount_due_cents,
+        repair_orders (ro_number)`)
+      .in("payment_status", ["unpaid","partial"])
+      .not("status", "in", "(voided,cancelled,archived)")
+      .order("created_at", { ascending: false })
+      .limit(5),
+
+    // Helcim invoices with sync errors
+    supabase.from("helcim_invoices")
+      .select(`id, helcim_invoice_number, sync_error,
+        repair_orders (ro_number)`)
+      .not("sync_error", "is", null)
+      .limit(3),
+
+    // Recent activity log (last 10 entries)
+    supabase.from("activity_logs")
+      .select("id, action, entity_type, created_at, details")
+      .order("created_at", { ascending: false })
+      .limit(10),
+
+    // All non-cancelled RO statuses (for pipeline)
+    supabase.from("repair_orders")
+      .select("status")
+      .not("status", "eq", "cancelled"),
+  ]);
+
+  // Build pipeline counts from all RO statuses
+  const pipelineCounts = {};
+  for (const row of (allROStatusesRes.data ?? [])) {
+    pipelineCounts[row.status] = (pipelineCounts[row.status] ?? 0) + 1;
+  }
+
+  return {
+    pendingApptsCount:        pendingAppts.count ?? 0,
+    activeROs:                activeROsRes.data  ?? [],
+    activeROsCount:           activeROsRes.data?.length ?? 0,
+    overdueROs:               overdueROsRes.data ?? [],
+    inProgressInspectionsCount: inspectionsRes.count ?? 0,
+    sentEstimates:            sentEstimatesRes.data    ?? [],
+    sentEstimatesCount:       sentEstimatesRes.data?.length ?? 0,
+    approvedEstimatesCount:   approvedEstimatesRes.count ?? 0,
+    unpaidInvoices:           unpaidInvoicesRes.data   ?? [],
+    unpaidInvoicesCount:      unpaidInvoicesRes.data?.length ?? 0,
+    syncErrors:               syncErrorsRes.data       ?? [],
+    recentActivity:           recentActivityRes.data   ?? [],
+    pipelineCounts,
+  };
+}

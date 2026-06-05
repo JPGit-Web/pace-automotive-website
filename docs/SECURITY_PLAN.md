@@ -33,6 +33,24 @@ Staff visits /portal
 - On logout: call `supabase.auth.signOut()` to revoke server-side session
 - Portal should detect expired session and redirect to `/portal` gracefully
 
+### Inactivity Auto Sign-Out (Phase 13)
+The staff portal contains sensitive customer, vehicle, repair order, inspection, estimate, invoice, and payment data. A client-side inactivity timer adds a defence-in-depth layer on top of the Supabase token expiry.
+
+**Planned behaviour:**
+- After 10 minutes of no user activity (mouse, keyboard, scroll, touch), show a warning modal.
+- Warning gives the user a "Stay Signed In" option with a 60-second grace period.
+- If not acknowledged, call `supabase.auth.signOut()` and redirect to `/portal`.
+- Any user interaction resets the timer.
+
+**Scope:** Portal-only. The timer runs only inside `PortalLayout` — public website visitors are unaffected.
+
+**Security properties:**
+- Does not store or log passwords or session tokens.
+- Does not weaken Supabase RLS or server-side authentication.
+- Supabase access tokens still expire independently on the server side (1 hour).
+- After sign-out, all `ProtectedRoute` guards redirect unauthenticated users to `/portal` as normal.
+- This is a UX-level protection for unattended workstations, not a replacement for server-side session expiry.
+
 ---
 
 ## 2. Protected Portal Routes

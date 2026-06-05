@@ -513,8 +513,103 @@ cost_cents integer, default_price_cents integer, sort_order integer
 
 ---
 
+---
+
+### G. Staff Portal Logo Upgrade
+
+**Problem:** The current staff portal sidebar/header uses text-only branding ("P.A.C.E. Power Automotive Centre of Excellence"). The owner wants the actual P.A.C.E. logo shown in the branding area.
+
+**Planned solution:**
+- Replace or enhance the text-only brand block in the sidebar with the real P.A.C.E. logo image.
+- Use the existing logo asset already in `public/` (e.g., `pace-logo.png` or a suitable variant).
+- Keep the "Staff Portal" badge visible below the logo.
+- Ensure the logo is sized correctly — not distorted or stretched.
+- Add `alt` text for accessibility.
+- Sidebar layout should remain clean at all breakpoints.
+
+**Design notes:**
+- Frontend-only change — no database changes, no API changes.
+- Affects `src/components/portal/PortalSidebar.jsx` and `src/styles/portal.css`.
+- Consider whether the dark navy sidebar calls for an inverted/white version of the logo or the full-color version.
+- A max-width and `object-fit: contain` should prevent distortion.
+
+---
+
+### H. Full-Width Portal Layout
+
+**Problem:** The portal content currently has a fixed `max-width: 1280px` on `.portalContent`. On large monitors, the dashboard, tables, and detail panels feel cramped and leave wide unused margins.
+
+**Planned solution:**
+- Increase or remove the max-width cap on `.portalContent` so portal pages use more of the available window width.
+- Keep comfortable left/right padding so content does not touch the viewport edge.
+- Tables, dashboard cards, and detail panels should expand naturally on wide screens.
+- Responsive behavior on laptop, tablet, and mobile must be preserved.
+- Public website layout must remain unchanged.
+
+**Design notes:**
+- Frontend-only change — no database or API changes.
+- Affects `src/styles/portal.css`, specifically the `.portalContent` rule.
+- Consider a wider max-width (e.g., `1600px` or `none`) rather than a hard removal, to avoid unreadable ultra-wide cards on 4K monitors.
+- May need minor adjustments to specific grid layouts (e.g., dashboard stat grid) to scale gracefully.
+
+---
+
+### I. Inactivity Auto Sign-Out
+
+**Problem:** The staff portal contains private customer, vehicle, repair order, inspection, estimate, invoice, and payment-status information. If a staff member walks away and leaves the portal open, the session should not remain accessible indefinitely.
+
+**Planned solution:**
+- Add an inactivity timer to the staff portal (not the public website).
+- After 10 minutes of no user activity, display a warning modal.
+- Warning explains: "Your session will expire due to inactivity."
+- User activity events that reset the timer: mouse movement, clicks, keyboard input, scrolling, touch events.
+- Modal provides a "Stay Signed In" button that resets the timer and dismisses the modal.
+- If the user does not respond within a short grace period (e.g., 60 seconds), automatically call `supabase.auth.signOut()` and redirect to `/portal`.
+
+**Suggested timer behavior:**
+- 10 min idle → show warning modal
+- 60 sec grace period → if no action, sign out and redirect to `/portal`
+- Any user activity → reset timer, dismiss modal if open
+
+**Implementation notes:**
+- Implemented as a React hook (e.g., `useInactivityTimer`) used inside `PortalLayout` or a wrapper component.
+- Uses `addEventListener` on `window` for activity events (mousedown, keydown, touchstart, scroll, pointermove).
+- Uses `supabase.auth.signOut()` from the existing Supabase client — no custom auth logic.
+- Portal-only: the hook is only included in `PortalLayout`, never in public-facing pages.
+- No passwords or sensitive data are logged.
+- Timer state is client-only — no server calls while idle.
+
+**Security notes:**
+- This is a defense-in-depth measure. Supabase access tokens already expire (1 hour), but the idle logout provides an additional UX-level protection when a workstation is left unattended.
+- Does not weaken existing Supabase RLS or authentication rules.
+- After sign-out, protected routes redirect to `/portal` as normal.
+
+---
+
+### J. Sign-In Password Visibility Toggle
+
+**Problem:** Staff occasionally need to visually verify their password before submitting the sign-in form, especially when entering a complex password on a shared workstation.
+
+**Planned solution:**
+- Add a show/hide toggle (eye icon) to the password field on the staff portal sign-in screen (`src/pages/portal/PortalLogin.jsx`).
+- Password field defaults to `type="password"` (hidden).
+- Clicking the eye icon toggles the field to `type="text"` (visible) and shows an eye-slash icon.
+- Clicking again returns to hidden.
+- Accessible: the toggle button has a descriptive `aria-label` ("Show password" / "Hide password").
+- Toggle does not store, log, or transmit the password value in any new way — it only changes the input type locally in the DOM.
+
+**Design notes:**
+- Frontend-only change — no database or API changes.
+- Affects `src/pages/portal/PortalLogin.jsx` only.
+- Toggle button should be positioned inside or adjacent to the password input field.
+- Styling should match the existing portal UI (subtle icon, consistent with the form design).
+- Login submission behavior is completely unchanged.
+
+---
+
 ### Phase 13 Acceptance Criteria
 
+**Workflow improvements (A–F):**
 - [ ] Staff can create a new customer from within the New Repair Order modal without leaving the page.
 - [ ] After creating a customer in the RO modal, staff can optionally add a vehicle before completing the RO form.
 - [ ] Repair orders support multiple labeled customer concern entries (list-style, not one blob of text).
@@ -524,9 +619,26 @@ cost_cents integer, default_price_cents integer, sort_order integer
 - [ ] Cost and markup are never shown on the customer-facing approval page.
 - [ ] Staff can insert a canned/preset job into an estimate with one action.
 - [ ] Estimate totals display in a horizontal layout at the bottom of the estimate builder.
+
+**Portal experience (G–J):**
+- [ ] Actual P.A.C.E. logo appears in the staff portal sidebar branding area.
+- [ ] Logo is correctly sized, not stretched or distorted.
+- [ ] "Staff Portal" badge remains visible alongside the logo.
+- [ ] Portal content uses full available browser width better on large screens.
+- [ ] No horizontal overflow is introduced at any breakpoint.
+- [ ] Staff portal signs out automatically after 10 minutes of inactivity.
+- [ ] A warning modal appears before the automatic sign-out.
+- [ ] Clicking "Stay Signed In" resets the timer and keeps the session active.
+- [ ] Sign-out uses the existing Supabase auth flow and redirects to `/portal`.
+- [ ] Sign-in screen has a working show/hide password toggle.
+- [ ] Password is hidden by default; toggle only changes the DOM input type locally.
+
+**Shared criteria:**
 - [ ] All existing workflows (repair orders, inspections, estimates, approvals, invoices) continue to work unchanged.
+- [ ] Public website is completely unaffected.
 - [ ] No secrets are exposed in frontend code.
 - [ ] No payment or card data is stored.
+- [ ] No `.delete()` calls are added.
 
 ---
 
