@@ -8,7 +8,6 @@ const navItems = [
   { label: "Repair Orders", href: "/portal/repair-orders", icon: "fa-solid fa-screwdriver-wrench" },
   { label: "Inspections",   href: "/portal/inspections",   icon: "fa-solid fa-clipboard-check" },
   { label: "Estimates",     href: "/portal/estimates",     icon: "fa-solid fa-file-invoice-dollar" },
-  { label: "Presets",       href: "/portal/presets",       icon: "fa-solid fa-bolt" },
   { label: "Invoices",      href: "/portal/invoices",      icon: "fa-solid fa-receipt" },
 ];
 
@@ -44,8 +43,18 @@ export default function PortalSidebar() {
         ))}
       </nav>
 
-      {/* Footer */}
+      {/* Footer — setup utilities */}
       <div className="portalSidebarFooter">
+        <p className="portalNavSection">Setup</p>
+        <NavLink
+          to="/portal/presets"
+          className={({ isActive }) => isActive ? "portalNavLink active" : "portalNavLink"}
+        >
+          <span className="portalNavIcon" aria-hidden="true">
+            <i className="fa-solid fa-bolt"></i>
+          </span>
+          Presets
+        </NavLink>
         <p className="portalVersionTag">P.A.C.E. Portal</p>
       </div>
     </aside>

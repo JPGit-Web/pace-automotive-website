@@ -202,6 +202,17 @@ These are larger than the Phase 13 incremental edits. They touch portal detail U
   - `addCannedJobToEstimate` copies `markup_type` and `markup_value_cents` from preset to estimate.
   - Internal pricing fields only — no change to any customer-facing output, approval email, invoice print, or Helcim invoice creation.
 
+- ✅ **15B — Sidebar / Portal UX Cleanup**
+  - Presets moved out of the main menu; now lives in a "Setup" section at the bottom of the sidebar.
+  - Active-state highlighting works on the bottom Presets link (same `portalNavLink.active` class as main menu).
+  - Stale phase text ("Phase 13A") removed. Footer shows "P.A.C.E. Portal" version tag below the Presets link.
+  - No route, schema, or pricing changes.
+
+**Phase 16A — Appointment Calendar (Planned, not yet scheduled):**
+- Full calendar view for appointments with day/week grid, drag-to-reschedule, and status colour coding.
+- Appointment calendar remains deferred until owner confirms desired calendar UX and whether Google Calendar integration is wanted.
+- Do not implement until owner approves.
+
 ---
 
 ## 4. Key Design Decisions

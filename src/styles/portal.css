@@ -177,12 +177,13 @@
 
 /* Sidebar footer */
 .portalSidebarFooter {
-  padding: 16px 20px;
+  padding: 0;
   border-top: 1px solid rgba(255,255,255,.08);
   flex-shrink: 0;
 }
 
 .portalVersionTag {
+  padding: 6px 20px 12px;
   font-size: .7rem;
   color: rgba(244,236,216,.25);
   letter-spacing: .3px;

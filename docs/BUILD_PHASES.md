@@ -821,6 +821,7 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 | 14D | RO concerns → estimate job groups — concerns auto-populate as grouped sections in the estimate builder | ✅ Complete |
 | 14E | Dedicated Presets page + improved job group removal (items ungroup in DB, not just UI) | ✅ Complete |
 | 15A | Percent or fixed dollar markup on estimate items and preset items | ✅ Complete |
+| 15B | Sidebar / portal UX cleanup — move Presets to footer Setup section | ✅ Complete |
 
 ---
 
@@ -849,6 +850,32 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 - [x] Preset items support both markup modes; copying a preset to an estimate preserves markup_type and markup_value_cents.
 - [x] Cost hint in item table shows "+$X.XX fixed" or "+X%" appropriately.
 - [x] No internal pricing fields in any customer-facing output.
+- [x] Build passes.
+
+---
+
+### Phase 15B — Sidebar / Portal UX Cleanup
+
+**Implemented:**
+- `src/components/portal/PortalSidebar.jsx` — Removed Presets from the main `navItems` list. Footer section replaced: now contains a "Setup" `portalNavSection` label, a `NavLink` to `/portal/presets` using the existing `portalNavLink` / `portalNavLink.active` styles (active state highlights on the Presets route), and the "P.A.C.E. Portal" version tag.
+- `src/styles/portal.css` — `.portalSidebarFooter` padding changed from `16px 20px` to `0` so the NavLink's own `padding: 10px 20px` handles alignment consistently with main menu links. `.portalVersionTag` gains its own `padding: 6px 20px 12px` to preserve spacing.
+
+**Main menu after change:**
+Dashboard · Customers · Vehicles · Appointments · Repair Orders · Inspections · Estimates · Invoices
+
+**Footer after change:**
+Setup (section label) → Presets (NavLink, active-highlighted) → P.A.C.E. Portal (dim version tag)
+
+**Not changed:** routing (`/portal/presets` route untouched), database, Helcim functions, approval functions, public website, any pricing/markup logic.
+
+**Acceptance criteria:**
+- [x] Presets removed from main menu.
+- [x] Presets link appears at bottom of sidebar under "Setup" heading.
+- [x] Active state highlights Presets link when on `/portal/presets`.
+- [x] All eight main menu items navigate correctly.
+- [x] No stale phase numbers visible in portal UI.
+- [x] Presets page still loads; preset CRUD still works.
+- [x] Estimate builder "Add Preset Job" and "Manage Presets →" link still work.
 - [x] Build passes.
 
 ---
