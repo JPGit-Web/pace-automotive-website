@@ -153,13 +153,13 @@ These are larger than the Phase 13 incremental edits. They touch portal detail U
   - `cost_cents`, `markup_percent`, `customer_unit_price_cents`, and RO `internal_notes` never appear in the printout.
   - Print is rendered only inside the authenticated staff portal — no public URL.
 
-- ⬜ **14C — Printable Internal Repair Order**
-  - Add a Print Internal RO button to the RO detail panel (staff portal only).
-  - Build a mechanic-facing print layout based on `DRAFT RO Internal.pdf` reference.
-  - Auto-fill: customer name, date, year/make/model/trim, license plate, odometer, VIN, promised date.
-  - Auto-fill numbered customer concerns from `repair_order_concerns`.
-  - Include blank workspace areas for technician notes/findings.
-  - Staff-only — never accessible to public or customer-facing routes.
+- ✅ **14C — Printable Internal Repair Order**
+  - Print Internal RO button added to RO detail modal linked-actions row (staff portal only).
+  - `InternalROPrintView.jsx` — auto-fills: customer name, date, year/make/model/trim, license plate, odometer (in+out), VIN, promised date, numbered concerns.
+  - Matches DRAFT RO Internal.pdf style: bordered info grid, numbered concern slots with write lines, QTY/DESCRIPTION materials table, lined technician notes area, signature block.
+  - Falls back to legacy `customer_concern` text if `repair_order_concerns` is empty.
+  - `getRepairOrder` updated: vehicle now includes `vin` and `trim`.
+  - Staff-only — rendered inside `ProtectedRoute`. No public URL. `internal_notes` not printed.
 
 - ⬜ **14D — RO Concerns to Estimate Job Groups**
   - When creating an estimate from a repair order, auto-pull active `repair_order_concerns` and create a grouped job section per concern.

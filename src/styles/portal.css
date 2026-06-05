@@ -2769,3 +2769,236 @@
     margin: 0 0 5pt;
   }
 }
+
+
+/* ============================================================
+   PHASE 14C — Printable Internal Repair Order Worksheet
+   .roPrintDoc is hidden on screen; @media print reveals it
+   and hides all portal UI. Uses separate classes from 14B
+   so invoice print and RO print never conflict.
+   ============================================================ */
+
+/* ── Screen: hide the RO worksheet ── */
+@media screen {
+  .roPrintDoc { display: none !important; }
+}
+
+/* ── Print: show only the RO worksheet ── */
+@media print {
+  /* Only show the RO worksheet if it exists in the DOM
+     (it is only rendered on the Repair Orders page) */
+  .roPrintDoc ~ * { display: none !important; }
+
+  body * { visibility: hidden !important; }
+  .roPrintDoc,
+  .roPrintDoc * { visibility: visible !important; }
+  .roPrintDoc {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    background: #fff;
+    color: #000;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11pt;
+    line-height: 1.45;
+    padding: 0;
+    margin: 0;
+  }
+
+  /* ── Shop header ── */
+  .roPrintShopHeader {
+    text-align: center;
+    margin-bottom: 6pt;
+    padding-bottom: 6pt;
+    border-bottom: 1.5pt solid #000;
+  }
+  .roPrintShopName {
+    font-size: 14pt;
+    font-weight: bold;
+    letter-spacing: 0.3pt;
+  }
+  .roPrintShopContact {
+    font-size: 9pt;
+    color: #444;
+    margin-top: 2pt;
+  }
+
+  /* ── Document title ── */
+  .roPrintDocTitle {
+    font-size: 15pt;
+    font-weight: bold;
+    letter-spacing: 1.5pt;
+    text-align: center;
+    margin: 7pt 0 8pt;
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 14pt;
+  }
+  .roPrintRoNum {
+    font-size: 12pt;
+    font-weight: normal;
+    font-family: "Courier New", monospace;
+    letter-spacing: 1pt;
+    color: #333;
+  }
+
+  /* ── Customer / vehicle info table ── */
+  .roPrintInfoTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 10pt;
+    border: 1pt solid #000;
+  }
+  .roPrintInfoTable td {
+    border: 1pt solid #000;
+    padding: 5pt 7pt 14pt;   /* extra bottom padding = writing space */
+    vertical-align: top;
+    min-width: 60pt;
+  }
+  .roPrintInfoLabel {
+    display: block;
+    font-size: 7.5pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5pt;
+    color: #555;
+    margin-bottom: 3pt;
+  }
+  .roPrintInfoValue {
+    display: block;
+    font-size: 11pt;
+    font-weight: 600;
+  }
+  .roPrintMono {
+    font-family: "Courier New", monospace;
+    letter-spacing: 0.5pt;
+  }
+
+  /* ── Section wrapper ── */
+  .roPrintSection {
+    border: 1pt solid #000;
+    margin-bottom: 9pt;
+    page-break-inside: avoid;
+  }
+  .roPrintSectionTitle {
+    font-size: 8.5pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.8pt;
+    background: #000;
+    color: #fff;
+    padding: 3pt 7pt;
+  }
+
+  /* ── Concerns ── */
+  .roPrintConcernSlot {
+    padding: 5pt 7pt 0;
+    border-bottom: 1pt dotted #ccc;
+  }
+  .roPrintConcernSlot:last-child {
+    border-bottom: none;
+  }
+  .roPrintConcernRow {
+    display: flex;
+    gap: 6pt;
+    min-height: 16pt;
+    align-items: flex-start;
+  }
+  .roPrintConcernNum {
+    font-size: 10pt;
+    font-weight: bold;
+    flex-shrink: 0;
+    min-width: 14pt;
+    padding-top: 1pt;
+  }
+  .roPrintConcernText {
+    font-size: 10.5pt;
+    flex: 1;
+    word-break: break-word;
+  }
+  .roPrintConcernWriteLine {
+    border-bottom: 0.75pt solid #999;
+    margin: 6pt 0 4pt;
+    height: 12pt;
+  }
+
+  /* ── Materials table ── */
+  .roPrintMaterialsTable {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .roPrintMatQtyHdr,
+  .roPrintMatQtyCell {
+    width: 52pt;
+    border-right: 1pt solid #000;
+    border-bottom: 0.5pt solid #ccc;
+    padding: 5pt 6pt;
+    text-align: center;
+  }
+  .roPrintMatDescHdr,
+  .roPrintMatDescCell {
+    border-bottom: 0.5pt solid #ccc;
+    padding: 5pt 8pt;
+  }
+  .roPrintMatQtyHdr,
+  .roPrintMatDescHdr {
+    font-size: 8pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5pt;
+    border-bottom: 1pt solid #000;
+    background: #f0f0f0;
+  }
+  .roPrintMatQtyCell,
+  .roPrintMatDescCell {
+    height: 18pt;
+    font-size: 10.5pt;
+  }
+  .roPrintMatQtyCell:last-child,
+  .roPrintMatDescCell:last-child {
+    border-bottom: none;
+  }
+
+  /* ── Technician notes area ── */
+  .roPrintTechSection {
+    page-break-inside: avoid;
+  }
+  .roPrintTechNotesArea {
+    min-height: 52pt;
+    border-bottom: 0.5pt solid #ccc;
+    margin: 4pt 7pt;
+    /* horizontal lines for writing */
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent 17pt,
+      #ccc 17pt,
+      #ccc 17.5pt
+    );
+  }
+
+  /* ── Signature row ── */
+  .roPrintSigRow {
+    display: flex;
+    gap: 30pt;
+    padding: 8pt 10pt 6pt;
+  }
+  .roPrintSigBlock {
+    flex: 1;
+  }
+  .roPrintSigLine {
+    border-top: 1pt solid #000;
+    margin-top: 22pt;
+    margin-bottom: 4pt;
+  }
+  .roPrintSigLabel {
+    font-size: 8.5pt;
+    color: #555;
+  }
+
+  /* Page setup for RO worksheet */
+  @page { size: letter portrait; margin: 0.55in; }
+}

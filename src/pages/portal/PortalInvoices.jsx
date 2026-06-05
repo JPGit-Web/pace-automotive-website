@@ -477,7 +477,13 @@ export default function PortalInvoices() {
                 )}
                 {selected && (
                   <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
-                    <button className="portalBtn portalBtnSecondary" onClick={() => window.print()}>
+                    <button className="portalBtn portalBtnSecondary" onClick={() => {
+                      const prev = document.title;
+                      const safe = (selected.helcim_invoice_number || "Invoice").replace(/[^A-Za-z0-9\-_]/g, "_");
+                      document.title = `PACE_${safe}`;
+                      window.onafterprint = () => { document.title = prev; window.onafterprint = null; };
+                      window.print();
+                    }}>
                       <i className="fa-solid fa-print"></i> Print
                     </button>
                     <span

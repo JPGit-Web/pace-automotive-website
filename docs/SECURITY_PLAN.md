@@ -404,12 +404,13 @@ These rules apply when Phase 14 is implemented. Record them here so they are not
 - ✅ No card data, Helcim API tokens, service role keys, or raw approval tokens appear in print output.
 - ✅ `getHelcimInvoice` fallback to `estimate_items` explicitly selects only: `id, description, quantity, unit_price_cents, line_total_cents, item_type, sort_order` — `cost_cents` and `markup_percent` are excluded.
 
-### 14C — Printable Internal Repair Order
+### 14C — Printable Internal Repair Order ✅ Implemented
 
-- The internal RO print layout is **staff-only**. It must only be accessible inside authenticated portal routes.
-- It may include fields not shown to customers: internal notes, cost fields, markup, odometer details, service advisor name, etc. — subject to owner approval of which fields are included.
-- Public users must not be able to reach internal RO print routes. No unauthenticated access.
-- Do not generate a shareable public URL for internal RO printouts.
+- ✅ Print layout is rendered only inside `PortalRepairOrders.jsx` (behind `ProtectedRoute`) — no public URL.
+- ✅ `internal_notes` is not printed. Only customer-visible fields are included: customer name, vehicle, odometer, concerns.
+- ✅ No cost fields, markup, secrets, card data, or approval tokens appear in the print output.
+- ✅ `getRepairOrder` vehicle select now includes `vin` and `trim` — no new sensitive data is exposed (both are customer-visible fields).
+- ✅ CSS uses separate `.roPrint*` class namespace — cannot accidentally reveal via invoice print path.
 
 ### 14D — RO Concerns to Estimate Job Groups
 

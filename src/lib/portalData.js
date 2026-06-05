@@ -320,7 +320,7 @@ export async function getRepairOrder(id) {
   if (ro.vehicle_id) {
     const { data, error } = await supabase
       .from("vehicles")
-      .select("id, year, make, model, license_plate, plate_province, color")
+      .select("id, year, make, model, trim, license_plate, plate_province, color, vin")
       .eq("id", ro.vehicle_id)
       .single();
     if (!error) vehicle = data;

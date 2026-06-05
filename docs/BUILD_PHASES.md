@@ -696,6 +696,36 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 
 ---
 
+### Phase 14C — Printable Internal Repair Order
+
+**Implemented:**
+- `src/components/portal/InternalROPrintView.jsx` — new staff-only print component (never customer-facing).
+  - Shop header: P.A.C.E. / Power Automotive Centre of Excellence, address, phone.
+  - Document title: REPAIR ORDER WORKSHEET + RO number (monospace).
+  - 4-row info grid (matches DRAFT RO Internal.pdf): Customer / Date, Make / Model / Year+Trim, License Plate / Odometer (in + out), VIN / Promised Date.
+  - Concerns section: numbered slots filled from `repair_order_concerns`; falls back to legacy `customer_concern`. Always shows minimum 7 slots with 2 blank write-lines below each concern.
+  - Materials section: QTY / DESCRIPTION table with 9 blank rows for handwriting.
+  - Technician Notes area: lined blank area.
+  - Signature block: Technician Signature / Date Completed.
+- `portalData.js` — `getRepairOrder` vehicle select updated to include `trim` and `vin`.
+- `PortalRepairOrders.jsx` — imports `InternalROPrintView`; adds "Print Internal RO" button (with `title="Print mechanic worksheet"`) in the linked-actions row; renders `<InternalROPrintView>` outside the modal with `selected`, `detailData`, and `roConcerns` as props.
+- `portal.css` — `@media screen { .roPrintDoc { display: none; } }` hides worksheet on screen. `@media print` visibility trick reveals only `.roPrintDoc`; black section title bars, bordered info grid, ruled concern lines, lined materials table, notes area with CSS rule lines. Letter portrait, 0.55in margins. Uses separate `.roPrint*` class namespace — no conflict with Phase 14B `.invPrint*` classes.
+
+**Security:**
+- `internal_notes` field is not printed. No cost/markup/secrets appear.
+- Worksheet is rendered only inside the authenticated portal (`ProtectedRoute`). No public URL.
+
+**Acceptance criteria:**
+- [x] Print Internal RO button in RO detail modal linked-actions row.
+- [x] Print preview shows only the mechanic worksheet, not portal UI.
+- [x] Customer name, vehicle year/make/model, license plate, VIN, odometer, promised date printed.
+- [x] Numbered concerns from `repair_order_concerns` appear; falls back to `customer_concern`.
+- [x] Blank materials rows and technician notes area appear.
+- [x] Invoice print (14B) still works; no conflict.
+- [x] No `.delete()` calls. No secrets. Build passes.
+
+---
+
 ## Phase Completion Checklist
 
 | Phase | Feature | Status |
@@ -724,7 +754,7 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 | 13F | Horizontal estimate totals bar — full-width navy bar replacing the vertical totals box | ✅ Complete |
 | 14A | Detail view modals + modal sizing — RO and invoice details as centered modals; `.portalModalLg`; Manage Preset Jobs enlarged | ✅ Complete |
 | 14B | Printable customer invoice — Print button + letter-print layout via `@media print`; cost/markup excluded | ✅ Complete |
-| 14C | Printable internal RO — mechanic worksheet auto-filled from RO concerns, vehicle, customer | ⬜ Not started |
+| 14C | Printable internal RO — mechanic worksheet auto-filled from RO concerns, vehicle, customer | ✅ Complete |
 | 14D | RO concerns → estimate job groups — concerns auto-populate as grouped sections in the estimate builder | ⬜ Not started |
 
 ---

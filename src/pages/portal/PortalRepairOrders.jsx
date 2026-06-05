@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import PortalLayout from "../../components/portal/PortalLayout";
+import InternalROPrintView from "../../components/portal/InternalROPrintView";
 import { supabase } from "../../lib/supabase";
 import {
   listRepairOrders, getRepairOrder, createRepairOrder,
@@ -880,6 +881,17 @@ export default function PortalRepairOrders() {
 
               {/* Linked actions */}
               <div style={{ display:"flex", gap:"8px", marginTop:"12px", paddingTop:"12px", borderTop:"1px solid var(--p-border)", flexWrap:"wrap" }}>
+                <button className="portalBtn portalBtnSecondary"
+                  onClick={() => {
+                    const prev = document.title;
+                    const safe = (selected.ro_number || "RO").replace(/[^A-Za-z0-9\-_]/g, "_");
+                    document.title = `PACE_${safe}`;
+                    window.onafterprint = () => { document.title = prev; window.onafterprint = null; };
+                    window.print();
+                  }}
+                  title="Print mechanic worksheet">
+                  <i className="fa-solid fa-print"></i> Print Internal RO
+                </button>
                 {roInspection ? (
                   <button className="portalBtn portalBtnPrimary"
                     onClick={() => navigate("/portal/inspections", { state: { inspectionId: roInspection.id } })}>
@@ -1277,6 +1289,10 @@ export default function PortalRepairOrders() {
             </form>
           </div>
         </div>
+      )}
+      {/* Print-only internal RO worksheet — hidden on screen, revealed by @media print */}
+      {selected && detailData && (
+        <InternalROPrintView ro={selected} detailData={detailData} concerns={roConcerns} />
       )}
     </PortalLayout>
   );
