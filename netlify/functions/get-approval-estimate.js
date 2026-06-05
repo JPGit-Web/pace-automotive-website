@@ -74,7 +74,15 @@ export const handler = async (event) => {
       estimate_id:         `eq.${tokenRow.estimate_id}`,
       is_active:           "eq.true",
       is_customer_visible: "eq.true",
-      select:              "id,item_type,description,quantity,unit_price_cents,line_total_cents,is_required,approval_status",
+      select:              "id,item_type,description,quantity,unit_price_cents,line_total_cents,is_required,approval_status,estimate_job_id",
+    });
+
+    /* Fetch active job sections (title + sort_order only — notes are internal staff-only) */
+    const jobs = await sbGet("estimate_jobs", {
+      estimate_id: `eq.${tokenRow.estimate_id}`,
+      is_active:   "eq.true",
+      select:      "id,title,sort_order",
+      order:       "sort_order.asc",
     });
 
     /* Fetch RO + vehicle (separate, no ambiguous join) */
@@ -94,7 +102,7 @@ export const handler = async (event) => {
       }
     }
 
-    /* Return only customer-safe data — no internal notes, no token_hash */
+    /* Return only customer-safe data — no internal notes, no token_hash, no cost/markup */
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -113,6 +121,11 @@ export const handler = async (event) => {
         },
         ro_number: ro?.ro_number ?? null,
         vehicle:   vehicle ? { year: vehicle.year, make: vehicle.make, model: vehicle.model } : null,
+        jobs: (jobs ?? []).map((j) => ({
+          id:         j.id,
+          title:      j.title,
+          sort_order: j.sort_order,
+        })),
         items: (items ?? []).map((i) => ({
           id:               i.id,
           item_type:        i.item_type,
@@ -122,6 +135,7 @@ export const handler = async (event) => {
           line_total_cents: i.line_total_cents,
           is_required:      i.is_required,
           approval_status:  i.approval_status,
+          estimate_job_id:  i.estimate_job_id ?? null,
         })),
       }),
     };

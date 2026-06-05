@@ -161,14 +161,21 @@ These are larger than the Phase 13 incremental edits. They touch portal detail U
   - `getRepairOrder` updated: vehicle now includes `vin` and `trim`.
   - Staff-only — rendered inside `ProtectedRoute`. No public URL. `internal_notes` not printed.
 
-- ⬜ **14D — RO Concerns to Estimate Job Groups**
+- ✅ **14D — RO Concerns to Estimate Job Groups**
   - When creating an estimate from a repair order, auto-pull active `repair_order_concerns` and create a grouped job section per concern.
   - Each concern becomes a named section/job header in the estimate builder.
   - Staff add notes, labour, parts, supplies, fees, and discounts under each concern.
   - Customer approval page and email show clearly grouped job sections.
   - Helcim invoice creation continues using final customer-facing prices only.
-  - **May require a new `estimate_jobs` table** (or `estimate_items.estimate_job_id` / `repair_order_concern_id` column). Do not create schema until Phase 14D implementation begins and the current estimate model is reviewed.
+  - Implemented: `estimate_jobs` table + `estimate_job_id` on `estimate_items`; grouped estimate builder UI; grouped approval page; idempotent concern-to-job creation.
   - Must not break existing approval workflow, invoice creation, or cost/markup isolation.
+
+- ✅ **14E — Dedicated Presets Page + Improved Job Group Removal**
+  - Dedicated `/portal/presets` page (sidebar nav between Estimates and Invoices): full CRUD for preset jobs — create, edit, deactivate/reactivate; add/edit line items with staff-only cost/markup pricing. Two-column layout (job list + editor panel). No hard delete.
+  - Preset picker in estimate builder gains a "Manage Presets →" footer link navigating to the Presets page.
+  - Removing a job group from an estimate now correctly sets `estimate_job_id = null` on assigned items in the DB before soft-hiding the job (previously only updated the UI; items' DB link was left stale). Confirmation updated to "Remove this job group from the estimate? Existing line items will be moved to Ungrouped."
+  - New portalData helpers: `ungroupEstimateJobItems`, `listAllCannedJobs`.
+  - No schema migrations (all tables already existed).
 
 **Phase ordering recommendation:**
 1. Complete Phase 13F (horizontal estimate totals bar) if still planned.
@@ -184,6 +191,12 @@ These are larger than the Phase 13 incremental edits. They touch portal detail U
 - Customer portal (login-based, not token-based)
 - Reporting and analytics dashboard
 - Mobile app
+
+**Pricing markup polish (future phase — do not implement until owner confirms):**
+Currently `estimate_items.markup_percent` supports percentage-based markup only (e.g. cost $50 + 25% = $62.50). A future phase should add support for **fixed dollar markup** as an alternative:
+- Markup type: `percent` or `dollar`
+- Dollar markup: cost $50 + $20 = $70
+This would require a new `markup_type` column on `estimate_items` and `canned_job_items` (migration), updates to the `ItemForm` component (toggle or dropdown), auto-calculation logic changes in `portalData.js`, and no impact on customer-facing output (markup is always staff-only). **Do not implement until explicitly requested.** Document here so the schema decision (percent vs dollar column) can be made before the migration is written.
 
 ---
 

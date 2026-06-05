@@ -13,6 +13,9 @@ import {
   createCannedJob, updateCannedJob, softHideCannedJob,
   createCannedJobItem, updateCannedJobItem,
   addCannedJobToEstimate,
+  listEstimateJobs, createEstimateJob, updateEstimateJob, softHideEstimateJob,
+  ungroupEstimateJobItems,
+  ensureEstimateJobsFromRepairOrder,
 } from "../../lib/portalData";
 
 const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
@@ -86,6 +89,75 @@ function TypeBadge({ type }) {
     <span className={`portalTypeBadge ${typeClass(type)}`}>
       {ITEM_TYPE_LABELS[type] ?? type}
     </span>
+  );
+}
+
+/* ── Shared item table (used in both flat and grouped modes) ── */
+function ItemTable({ items, onEdit, onHide, disabled }) {
+  if (!items.length) return null;
+  return (
+    <div style={{ overflowX:"auto" }}>
+      <table className="portalEstItemTable">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Description</th>
+            <th className="money">Qty</th>
+            <th className="money">Customer Price</th>
+            <th className="money">Total</th>
+            <th>Status</th>
+            <th>Visible</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr key={item.id}>
+              <td><TypeBadge type={item.item_type} /></td>
+              <td>
+                <span style={{ fontWeight:600 }}>{item.description}</span>
+                {item.is_required && (
+                  <span style={{ marginLeft:6, fontSize:".65rem", fontWeight:700, color:"var(--p-warning)", textTransform:"uppercase" }}>Required</span>
+                )}
+                {item.cost_cents != null && (
+                  <div className="portalItemCostHint">
+                    Cost: {fmtCents(item.cost_cents)}
+                    {item.markup_percent != null && ` · +${item.markup_percent}%`}
+                  </div>
+                )}
+                {item.notes && (
+                  <div style={{ fontSize:".75rem", color:"var(--p-text-3)", marginTop:2 }}>{item.notes}</div>
+                )}
+              </td>
+              <td className="money" style={{ color:"var(--p-text-2)" }}>{item.quantity}</td>
+              <td className="money" style={{ color:"var(--p-text-2)" }}>{fmtCents(item.unit_price_cents)}</td>
+              <td className="money" style={{ fontWeight:700, color: item.item_type === "discount" ? "var(--p-danger)" : "var(--p-text)" }}>
+                {item.item_type === "discount" ? `-${fmtCents(item.line_total_cents)}` : fmtCents(item.line_total_cents)}
+              </td>
+              <td>
+                <span className={`portalBadge ${item.approval_status}`}>
+                  {ITEM_APPROVAL_LABELS[item.approval_status] ?? item.approval_status}
+                </span>
+              </td>
+              <td style={{ textAlign:"center" }}>
+                <i className={`fa-solid ${item.is_customer_visible ? "fa-eye" : "fa-eye-slash"}`}
+                  style={{ color: item.is_customer_visible ? "var(--p-success)" : "var(--p-text-3)" }}></i>
+              </td>
+              <td>
+                <div className="portalTableActions">
+                  <button className="portalBtnIcon" onClick={() => onEdit(item)} title="Edit item" disabled={disabled}>
+                    <i className="fa-solid fa-pen"></i>
+                  </button>
+                  <button className="portalBtnIcon danger" onClick={() => onHide(item)} title="Hide item" disabled={disabled}>
+                    <i className="fa-solid fa-eye-slash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -282,6 +354,14 @@ export default function PortalEstimates() {
   const [editingJobItem,  setEditingJobItem]  = useState(null);   // item being edited
   const [manageError,     setManageError]     = useState("");
 
+  /* ── Estimate job sections ── */
+  const [jobs,            setJobs]            = useState([]);   // active estimate_jobs for current estimate
+  const [addingToJob,     setAddingToJob]     = useState(null); // jobId context for add item / add preset (null = ungrouped)
+  const [addJobModal,     setAddJobModal]     = useState(false);
+  const [newJobForm,      setNewJobForm]      = useState({ title: "", notes: "" });
+  const [newJobFormErrors,setNewJobFormErrors]= useState({});
+  const [savingNewJob,    setSavingNewJob]    = useState(false);
+
   /* ── Load list ── */
   const loadList = useCallback(async () => {
     setLoading(true); setError(null);
@@ -310,6 +390,14 @@ export default function PortalEstimates() {
       setLocalTitle(est.title ?? "");
       setLocalMsg(est.customer_message ?? "");
       setTotals({ subtotal_cents: est.subtotal_cents, tax_cents: est.tax_cents, total_cents: est.total_cents, approved_total_cents: est.approved_total_cents });
+
+      // Load job sections; auto-create from RO concerns if none exist yet
+      let estJobs = est.jobs || [];
+      if (est.repair_order_id && estJobs.length === 0) {
+        estJobs = await ensureEstimateJobsFromRepairOrder(estimateId, est.repair_order_id).catch(() => []);
+      }
+      setJobs(estJobs);
+
       // Check for existing invoice
       const inv = await getHelcimInvoiceByEstimate(estimateId).catch(() => null);
       setEstInvoice(inv);
@@ -322,7 +410,7 @@ export default function PortalEstimates() {
   }
 
   function backToList() {
-    setView("list"); setActiveEst(null); setItems([]); setTotals(null);
+    setView("list"); setActiveEst(null); setItems([]); setTotals(null); setJobs([]); setAddingToJob(null);
     loadList();
   }
 
@@ -418,6 +506,7 @@ export default function PortalEstimates() {
       const refreshed = await getEstimate(activeEst.id);
       setActiveEst(refreshed);
       setItems(refreshed.items || []);
+      setJobs(refreshed.jobs || []);
       setTotals({ subtotal_cents: refreshed.subtotal_cents, tax_cents: refreshed.tax_cents, total_cents: refreshed.total_cents, approved_total_cents: refreshed.approved_total_cents });
       setEstimates((p) => p.map((e) => e.id === refreshed.id ? { ...e, status: refreshed.status } : e));
     } catch (err) {
@@ -472,7 +561,8 @@ export default function PortalEstimates() {
   }
 
   /* ── Open add modal ── */
-  function openAddModal() {
+  function openAddModal(jobId = null) {
+    setAddingToJob(jobId ?? null);
     setItemForm({ ...EMPTY_ITEM_FORM });
     setItemFormErrors({});
     setItemSaveError("");
@@ -510,7 +600,7 @@ export default function PortalEstimates() {
     if (Object.keys(errors).length) { setItemFormErrors(errors); return; }
     setSavingItem(true); setItemSaveError("");
     try {
-      const newItem = await createEstimateItem(activeEst.id, activeEst.repair_order_id, itemForm);
+      const newItem = await createEstimateItem(activeEst.id, activeEst.repair_order_id, { ...itemForm, estimate_job_id: addingToJob });
       await logActivity("estimate.item_created", "estimate_item", newItem.id, {
         estimate_number: activeEst.estimate_number, description: newItem.description,
       });
@@ -552,15 +642,67 @@ export default function PortalEstimates() {
     } catch { alert("Failed to hide item. Please try again."); }
   }
 
+  /* ── Job section handlers ── */
+  function openAddJobModal() {
+    setNewJobForm({ title: "", notes: "" });
+    setNewJobFormErrors({});
+    setAddJobModal(true);
+  }
+
+  async function handleSaveNewJob(e) {
+    e.preventDefault();
+    if (!newJobForm.title.trim()) {
+      setNewJobFormErrors({ title: "Job title is required." });
+      return;
+    }
+    setSavingNewJob(true);
+    try {
+      const maxSort = jobs.reduce((m, j) => Math.max(m, j.sort_order), -1);
+      const created = await createEstimateJob(activeEst.id, {
+        title:      newJobForm.title.trim(),
+        notes:      newJobForm.notes.trim() || null,
+        sort_order: maxSort + 1,
+      });
+      setJobs((prev) => [...prev, created]);
+      setAddJobModal(false);
+    } catch { setNewJobFormErrors({ title: "Failed to create job. Please try again." }); }
+    finally { setSavingNewJob(false); }
+  }
+
+  function handleJobTitleChange(jobId, val) {
+    setJobs((prev) => prev.map((j) => j.id === jobId ? { ...j, title: val } : j));
+  }
+
+  function handleJobNotesChange(jobId, val) {
+    setJobs((prev) => prev.map((j) => j.id === jobId ? { ...j, notes: val } : j));
+  }
+
+  async function handleJobBlur(job) {
+    try {
+      await updateEstimateJob(job.id, { title: job.title || "Job", notes: job.notes ?? null });
+    } catch { /* silent — next save or reload will reconcile */ }
+  }
+
+  async function handleHideJob(jobId) {
+    if (!window.confirm("Remove this job group from the estimate? Existing line items will be moved to Ungrouped.")) return;
+    try {
+      await ungroupEstimateJobItems(jobId);
+      setItems((prev) => prev.map((i) => i.estimate_job_id === jobId ? { ...i, estimate_job_id: null } : i));
+      await softHideEstimateJob(jobId);
+      setJobs((prev) => prev.filter((j) => j.id !== jobId));
+    } catch { alert("Failed to remove job group. Please try again."); }
+  }
+
   /* ── Preset job picker ── */
-  async function openPresetModal() {
+  async function openPresetModal(jobId = null) {
+    setAddingToJob(jobId ?? null);
     setPresetModal(true);
     setPreviewJob(null);
     setPresetError("");
     setPresetLoading(true);
     try {
-      const jobs = await listCannedJobs();
-      setCannedJobs(jobs);
+      const cannedList = await listCannedJobs();
+      setCannedJobs(cannedList);
     } catch { setPresetError("Failed to load preset jobs."); }
     finally { setPresetLoading(false); }
   }
@@ -579,7 +721,7 @@ export default function PortalEstimates() {
     if (!previewJob || addingPreset) return;
     setAddingPreset(true); setPresetError("");
     try {
-      const newItems = await addCannedJobToEstimate(activeEst.id, activeEst.repair_order_id, previewJob.id);
+      const newItems = await addCannedJobToEstimate(activeEst.id, activeEst.repair_order_id, previewJob.id, addingToJob);
       setItems((p) => [...p, ...newItems].sort((a, b) => a.sort_order - b.sort_order));
       await refreshTotals(activeEst.id);
       setPresetModal(false);
@@ -818,96 +960,145 @@ export default function PortalEstimates() {
               {savingMeta && <p style={{ fontSize:".72rem", color:"var(--p-text-3)" }}>Saving…</p>}
             </div>
 
-            {/* Line items */}
-            <div className="portalCard" style={{ padding:0, overflow:"hidden", marginBottom:"16px" }}>
-              <div style={{ padding:"16px 20px", borderBottom:"1px solid var(--p-border)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:"8px" }}>
-                <p style={{ margin:0, fontWeight:700, fontSize:".82rem", textTransform:"uppercase", letterSpacing:"1px", color:"var(--p-text-2)" }}>
-                  Line Items
-                </p>
-                <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
-                  <button className="portalBtn portalBtnSecondary" style={{ padding:"7px 14px", fontSize:".82rem" }}
-                    onClick={openPresetModal} disabled={activeEst.status === "cancelled"}
-                    title="Add a preset job bundle">
-                    <i className="fa-solid fa-bolt"></i> Add Preset Job
-                  </button>
-                  <button className="portalBtn portalBtnPrimary" style={{ padding:"7px 16px", fontSize:".82rem" }}
-                    onClick={openAddModal} disabled={activeEst.status === "cancelled"}>
-                    <i className="fa-solid fa-plus"></i> Add Item
-                  </button>
+            {/* Line items — flat mode (no job sections) */}
+            {jobs.length === 0 && (
+              <div className="portalCard" style={{ padding:0, overflow:"hidden", marginBottom:"16px" }}>
+                <div style={{ padding:"16px 20px", borderBottom:"1px solid var(--p-border)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:"8px" }}>
+                  <p style={{ margin:0, fontWeight:700, fontSize:".82rem", textTransform:"uppercase", letterSpacing:"1px", color:"var(--p-text-2)" }}>
+                    Line Items
+                  </p>
+                  <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
+                    <button className="portalBtn portalBtnSecondary" style={{ padding:"7px 14px", fontSize:".82rem" }}
+                      onClick={openAddJobModal} disabled={activeEst.status === "cancelled"}
+                      title="Create a named job section to group line items">
+                      <i className="fa-solid fa-layer-group"></i> New Job Group
+                    </button>
+                    <button className="portalBtn portalBtnSecondary" style={{ padding:"7px 14px", fontSize:".82rem" }}
+                      onClick={() => openPresetModal(null)} disabled={activeEst.status === "cancelled"}
+                      title="Add a preset job bundle">
+                      <i className="fa-solid fa-bolt"></i> Add Preset Job
+                    </button>
+                    <button className="portalBtn portalBtnPrimary" style={{ padding:"7px 16px", fontSize:".82rem" }}
+                      onClick={() => openAddModal(null)} disabled={activeEst.status === "cancelled"}>
+                      <i className="fa-solid fa-plus"></i> Add Item
+                    </button>
+                  </div>
                 </div>
+                {items.length === 0 ? (
+                  <div className="portalEmptyState" style={{ padding:"32px 20px" }}>
+                    <p style={{ color:"var(--p-text-3)", margin:0 }}>No items yet. Click Add Item to begin building this estimate.</p>
+                  </div>
+                ) : (
+                  <ItemTable items={items}
+                    onEdit={openEditModal} onHide={handleHideItem}
+                    disabled={activeEst.status === "cancelled"} />
+                )}
               </div>
+            )}
 
-              {items.length === 0 ? (
-                <div className="portalEmptyState" style={{ padding:"32px 20px" }}>
-                  <p style={{ color:"var(--p-text-3)", margin:0 }}>No items yet. Click Add Item to begin building this estimate.</p>
-                </div>
-              ) : (
-                <div style={{ overflowX:"auto" }}>
-                  <table className="portalEstItemTable">
-                    <thead>
-                      <tr>
-                        <th>Type</th>
-                        <th>Description</th>
-                        <th className="money">Qty</th>
-                        <th className="money">Customer Price</th>
-                        <th className="money">Total</th>
-                        <th>Status</th>
-                        <th>Visible</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item) => (
-                        <tr key={item.id}>
-                          <td><TypeBadge type={item.item_type} /></td>
-                          <td>
-                            <span style={{ fontWeight:600 }}>{item.description}</span>
-                            {item.is_required && (
-                              <span style={{ marginLeft:6, fontSize:".65rem", fontWeight:700, color:"var(--p-warning)", textTransform:"uppercase" }}>Required</span>
-                            )}
-                            {item.cost_cents != null && (
-                              <div className="portalItemCostHint">
-                                Cost: {fmtCents(item.cost_cents)}
-                                {item.markup_percent != null && ` · +${item.markup_percent}%`}
-                              </div>
-                            )}
-                            {item.notes && (
-                              <div style={{ fontSize:".75rem", color:"var(--p-text-3)", marginTop:2 }}>{item.notes}</div>
-                            )}
-                          </td>
-                          <td className="money" style={{ color:"var(--p-text-2)" }}>{item.quantity}</td>
-                          <td className="money" style={{ color:"var(--p-text-2)" }}>{fmtCents(item.unit_price_cents)}</td>
-                          <td className="money" style={{ fontWeight:700, color: item.item_type === "discount" ? "var(--p-danger)" : "var(--p-text)" }}>
-                            {item.item_type === "discount" ? `-${fmtCents(item.line_total_cents)}` : fmtCents(item.line_total_cents)}
-                          </td>
-                          <td>
-                            <span className={`portalBadge ${item.approval_status}`}>
-                              {ITEM_APPROVAL_LABELS[item.approval_status] ?? item.approval_status}
-                            </span>
-                          </td>
-                          <td style={{ textAlign:"center" }}>
-                            <i className={`fa-solid ${item.is_customer_visible ? "fa-eye" : "fa-eye-slash"}`}
-                              style={{ color: item.is_customer_visible ? "var(--p-success)" : "var(--p-text-3)" }}></i>
-                          </td>
-                          <td>
-                            <div className="portalTableActions">
-                              <button className="portalBtnIcon" onClick={() => openEditModal(item)} title="Edit item"
-                                disabled={activeEst.status === "cancelled"}>
-                                <i className="fa-solid fa-pen"></i>
+            {/* Line items — grouped mode (job sections exist) */}
+            {jobs.length > 0 && (() => {
+              const activeJobIds = new Set(jobs.map((j) => j.id));
+              const ungrouped = items.filter((i) => !i.estimate_job_id || !activeJobIds.has(i.estimate_job_id));
+              const isCancelled = activeEst.status === "cancelled";
+              return (
+                <div className="portalCard" style={{ padding:0, overflow:"hidden", marginBottom:"16px" }}>
+                  {/* Header */}
+                  <div style={{ padding:"16px 20px", borderBottom:"1px solid var(--p-border)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:"8px" }}>
+                    <p style={{ margin:0, fontWeight:700, fontSize:".82rem", textTransform:"uppercase", letterSpacing:"1px", color:"var(--p-text-2)" }}>
+                      Job Sections
+                    </p>
+                    <button className="portalBtn portalBtnSecondary" style={{ padding:"7px 14px", fontSize:".82rem" }}
+                      onClick={openAddJobModal} disabled={isCancelled}
+                      title="Create a new named job section">
+                      <i className="fa-solid fa-layer-group"></i> New Job Group
+                    </button>
+                  </div>
+
+                  {/* One section per active job */}
+                  {jobs.map((job) => {
+                    const jobItems = items.filter((i) => i.estimate_job_id === job.id);
+                    return (
+                      <div key={job.id} className="estJobSection">
+                        <div className="estJobHeader">
+                          <div className="estJobTitleRow">
+                            <input
+                              className="estJobTitleInput"
+                              value={job.title}
+                              onChange={(e) => handleJobTitleChange(job.id, e.target.value)}
+                              onBlur={() => handleJobBlur(job)}
+                              disabled={isCancelled}
+                              aria-label="Job section title"
+                            />
+                            <div className="estJobActions">
+                              <button className="portalBtn portalBtnSecondary" style={{ padding:"5px 10px", fontSize:".78rem" }}
+                                onClick={() => openPresetModal(job.id)} disabled={isCancelled}
+                                title="Add a preset job bundle to this section">
+                                <i className="fa-solid fa-bolt"></i> Preset
                               </button>
-                              <button className="portalBtnIcon danger" onClick={() => handleHideItem(item)} title="Hide item"
-                                disabled={activeEst.status === "cancelled"}>
+                              <button className="portalBtn portalBtnPrimary" style={{ padding:"5px 10px", fontSize:".78rem" }}
+                                onClick={() => openAddModal(job.id)} disabled={isCancelled}>
+                                <i className="fa-solid fa-plus"></i> Add Item
+                              </button>
+                              <button className="portalBtnIcon" title="Hide job section"
+                                onClick={() => handleHideJob(job.id)} disabled={isCancelled}
+                                style={{ color:"var(--p-text-3)" }}>
                                 <i className="fa-solid fa-eye-slash"></i>
                               </button>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          </div>
+                          <textarea
+                            className="estJobNotesInput"
+                            value={job.notes ?? ""}
+                            onChange={(e) => handleJobNotesChange(job.id, e.target.value)}
+                            onBlur={() => handleJobBlur(job)}
+                            placeholder="Notes for this job section (staff only)…"
+                            rows={1}
+                            disabled={isCancelled}
+                          />
+                        </div>
+                        {jobItems.length === 0 ? (
+                          <div style={{ padding:"10px 20px", fontSize:".82rem", color:"var(--p-text-3)", fontStyle:"italic" }}>
+                            No items yet — click Add Item above.
+                          </div>
+                        ) : (
+                          <ItemTable items={jobItems}
+                            onEdit={openEditModal} onHide={handleHideItem}
+                            disabled={isCancelled} />
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Ungrouped items section */}
+                  <div className="estJobSection estJobUngrouped">
+                    <div className="estJobHeader">
+                      <div className="estJobTitleRow">
+                        <span className="estJobUngroupedTitle">Ungrouped Items</span>
+                        <div className="estJobActions">
+                          <button className="portalBtn portalBtnSecondary" style={{ padding:"5px 10px", fontSize:".78rem" }}
+                            onClick={() => openPresetModal(null)} disabled={isCancelled}
+                            title="Add a preset bundle as ungrouped items">
+                            <i className="fa-solid fa-bolt"></i> Preset
+                          </button>
+                          <button className="portalBtn portalBtnPrimary" style={{ padding:"5px 10px", fontSize:".78rem" }}
+                            onClick={() => openAddModal(null)} disabled={isCancelled}>
+                            <i className="fa-solid fa-plus"></i> Add Item
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {ungrouped.length === 0 ? (
+                      <div style={{ padding:"10px 20px", fontSize:".82rem", color:"var(--p-text-3)" }}>No ungrouped items.</div>
+                    ) : (
+                      <ItemTable items={ungrouped}
+                        onEdit={openEditModal} onHide={handleHideItem}
+                        disabled={isCancelled} />
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             {/* Horizontal Totals Bar */}
             {totals && (
@@ -1007,6 +1198,60 @@ export default function PortalEstimates() {
               </div>
             )}
 
+            {/* ─── New Job Group modal ─────────────────────────── */}
+            {addJobModal && (
+              <div className="portalModalOverlay" onClick={(e) => e.target === e.currentTarget && setAddJobModal(false)}>
+                <div className="portalModalCard" style={{ maxWidth:"440px" }} role="dialog" aria-modal="true">
+                  <div className="portalModalHeader">
+                    <h2 className="portalModalTitle">
+                      <i className="fa-solid fa-layer-group" style={{ marginRight:8, color:"var(--p-navy)" }}></i>
+                      New Job Group
+                    </h2>
+                    <button className="portalModalClose" onClick={() => setAddJobModal(false)}>
+                      <i className="fa-solid fa-xmark"></i>
+                    </button>
+                  </div>
+                  <form onSubmit={handleSaveNewJob} noValidate>
+                    <div className="portalModalBody">
+                      <div className="portalForm">
+                        <div className="portalFormField">
+                          <label className="portalFormLabel">Job Title<span className="req">*</span></label>
+                          <input
+                            className={`portalFormInput${newJobFormErrors.title ? " invalid" : ""}`}
+                            type="text"
+                            value={newJobForm.title}
+                            onChange={(e) => { setNewJobForm((p) => ({ ...p, title: e.target.value })); if (newJobFormErrors.title) setNewJobFormErrors({}); }}
+                            placeholder="e.g. Engine noise on startup"
+                            autoFocus
+                            autoComplete="off"
+                          />
+                          {newJobFormErrors.title && <p className="portalFormFieldError">{newJobFormErrors.title}</p>}
+                        </div>
+                        <div className="portalFormField">
+                          <label className="portalFormLabel">Notes (optional — staff only)</label>
+                          <textarea
+                            className="portalFormTextarea"
+                            rows={2}
+                            value={newJobForm.notes}
+                            onChange={(e) => setNewJobForm((p) => ({ ...p, notes: e.target.value }))}
+                            placeholder="Internal notes for this job section…"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="portalModalFooter">
+                      <button type="button" className="portalBtn portalBtnSecondary" onClick={() => setAddJobModal(false)}>
+                        Cancel
+                      </button>
+                      <button type="submit" className="portalBtn portalBtnPrimary" disabled={savingNewJob}>
+                        {savingNewJob ? "Creating…" : "Create Job Group"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
             {/* ─── Preset Job Picker modal ─────────────────────────── */}
             {presetModal && (
               <div className="portalModalOverlay" onClick={(e) => e.target === e.currentTarget && setPresetModal(false)}>
@@ -1095,6 +1340,10 @@ export default function PortalEstimates() {
                   </div>
                   <div className="portalModalFooter">
                     <button type="button" className="portalBtn portalBtnSecondary" onClick={() => setPresetModal(false)}>Cancel</button>
+                    <button type="button" className="portalBtnLink" style={{ fontSize:".82rem", marginRight:"auto" }}
+                      onClick={() => { setPresetModal(false); navigate("/portal/presets"); }}>
+                      <i className="fa-solid fa-arrow-up-right-from-square" style={{ marginRight:5, fontSize:".75rem" }}></i>Manage Presets
+                    </button>
                     <button type="button" className="portalBtn portalBtnPrimary"
                       onClick={handleAddPreset}
                       disabled={!previewJob || !previewJob.items.length || addingPreset}>

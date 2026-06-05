@@ -726,6 +726,69 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 
 ---
 
+### Phase 14D — RO Concerns to Estimate Job Groups
+
+**Implemented:**
+- `supabase/migrations/011_estimate_jobs.sql` — new `estimate_jobs` table (id, estimate_id FK, repair_order_concern_id FK nullable, title, notes, sort_order, is_active, created_at, updated_at); adds `estimate_job_id uuid null references estimate_jobs(id) on delete set null` column to `estimate_items`. RLS (authenticated staff only, no anon, no delete), indexes, updated_at trigger, grants.
+- `src/lib/portalData.js` — added `listEstimateJobs`, `createEstimateJob`, `updateEstimateJob`, `softHideEstimateJob`, `ensureEstimateJobsFromRepairOrder` (idempotent — creates one job per active concern, skips if jobs already exist). Updated `getEstimate` to fetch jobs in parallel. Updated `createEstimateItem` + `updateEstimateItem` to accept `estimate_job_id`. Updated `addCannedJobToEstimate` to accept optional `estimateJobId` parameter.
+- `src/pages/portal/PortalEstimates.jsx` — imports new helpers; adds `jobs` and `addingToJob` state; `openBuilderById` now loads jobs + calls `ensureEstimateJobsFromRepairOrder` on open; `backToList` clears jobs. `openAddModal(jobId)` and `openPresetModal(jobId)` accept optional job context. `handleAddItem`/`handleAddPreset` pass `addingToJob` to helpers. Added job CRUD handlers (`handleAddJob`, `handleJobTitleChange`, `handleJobNotesChange`, `handleJobBlur`, `handleHideJob`). Added `ItemTable` module-level component to eliminate duplicate table JSX. Line Items section now conditional: **flat mode** when no jobs exist (unchanged UI), **grouped mode** when jobs exist — each job section has inline-editable title + notes, per-job Add Item + Add Preset buttons, hide button; ungrouped section shows items without an active job.
+- `netlify/functions/get-approval-estimate.js` — fetches active `estimate_jobs` (id, title, sort_order — notes excluded as internal-only); adds `estimate_job_id` to item select; returns `jobs` array in response. Cost/markup never returned.
+- `src/pages/ApprovalPage.jsx` — grouped mode when `estData.jobs` non-empty: one card per job, ungrouped items in "Other Items" card. Flat mode fallback unchanged. Extracted `ApprovalItemRow` inline component to eliminate duplication.
+- `src/styles/portal.css` — `.estJobSection`, `.estJobHeader`, `.estJobTitleRow`, `.estJobTitleInput`, `.estJobUngroupedTitle`, `.estJobNotesInput`, `.estJobActions`, `.estJobUngrouped` — transparent-border inline inputs reveal outline on hover/focus; compact padding for job headers.
+
+**Security:**
+- `estimate_jobs.notes` (internal staff notes) never returned from `get-approval-estimate.js`.
+- `cost_cents`, `markup_percent`, `customer_unit_price_cents` never in any customer-facing path.
+- No `estimate_jobs` anon policy. Customer access is server-side only via service role key.
+- No `.delete()` calls. Soft-hide only (`is_active = false`).
+
+**Acceptance criteria:**
+- [x] Opening an estimate linked to an RO with concerns auto-creates job sections.
+- [x] Job sections show inline-editable title and notes (blur-saves to DB).
+- [x] Each job section has Add Item and Add Preset buttons that assign items to that job.
+- [x] Ungrouped section shows items with no active job assignment.
+- [x] Hide job section works; its items appear in Ungrouped section.
+- [x] Add Job Section button creates a new empty job.
+- [x] Existing estimates without jobs still show the flat Line Items UI (unchanged).
+- [x] Customer approval page shows items grouped under job titles when jobs exist.
+- [x] Flat approval mode unchanged when no jobs.
+- [x] Helcim invoice creation (flat items) unaffected.
+- [x] submit-estimate-approval.js unaffected (works on flat items).
+- [x] send-estimate-approval.js unaffected (flat item email).
+- [x] No secrets or cost/markup exposed. Build passes.
+
+---
+
+### Phase 14E — Dedicated Presets Page + Improved Job Group Removal
+
+**Implemented:**
+- `src/lib/portalData.js` — added `ungroupEstimateJobItems(estimateJobId)`: batch-sets `estimate_job_id = null` on all active items in a job section (does not recalculate prices); added `listAllCannedJobs()`: returns all canned jobs including inactive, for management pages.
+- `src/pages/portal/PortalPresets.jsx` — new dedicated portal page at `/portal/presets`. Two-column layout: left sidebar lists all preset jobs (active + inactive with badges); right panel shows create/edit form (name, description, category, sort_order, deactivate/reactivate) plus inline items list (add item / edit item). All CRUD via existing portalData helpers. No hard delete. Cost/markup in staff-only pricing section only.
+- `src/components/portal/PortalSidebar.jsx` — added "Presets" nav link (bolt icon) between Estimates and Invoices.
+- `src/App.jsx` — added `/portal/presets` route wrapped in `ProtectedRoute`.
+- `src/pages/portal/PortalEstimates.jsx` — imports `ungroupEstimateJobItems`; updated `handleHideJob`: confirmation text changed to "Remove this job group from the estimate? Existing line items will be moved to Ungrouped.", calls `ungroupEstimateJobItems(jobId)` first to null out items' `estimate_job_id` in DB, updates items state, then soft-hides the job; added "Manage Presets →" link in the preset picker modal footer (navigates to `/portal/presets`).
+
+**Security:**
+- `cost_cents`, `markup_percent`, `customer_unit_price_cents` appear only in the staff-authenticated Presets page — never in any customer-facing path.
+- No `.delete()` calls. Preset jobs soft-hide via `is_active = false`. Canned job items do not have `is_active`; items can be edited but not individually deactivated (no schema change required).
+- No schema migrations added in this phase (all tables already existed).
+
+**Acceptance criteria:**
+- [x] Sidebar shows "Presets" between Estimates and Invoices.
+- [x] `/portal/presets` loads the full-page preset manager.
+- [x] Can create a new preset job (name required, description/category/sort_order optional).
+- [x] Can edit an existing preset job's details and save.
+- [x] Can deactivate a preset job (it remains visible in the management list with an "Inactive" badge, disappears from the picker).
+- [x] Can reactivate an inactive preset job.
+- [x] Can add line items to a preset with full pricing (type, description, qty, cost, markup, customer price).
+- [x] Can edit existing line items in a preset.
+- [x] Estimate builder preset picker shows "Manage Presets →" link that navigates to the Presets page.
+- [x] Removing a job group in the estimate builder shows updated confirmation and moves items to Ungrouped in DB (not just in UI).
+- [x] Items moved to Ungrouped retain their prices (no recalculation).
+- [x] Build passes.
+
+---
+
 ## Phase Completion Checklist
 
 | Phase | Feature | Status |
@@ -755,7 +818,33 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 | 14A | Detail view modals + modal sizing — RO and invoice details as centered modals; `.portalModalLg`; Manage Preset Jobs enlarged | ✅ Complete |
 | 14B | Printable customer invoice — Print button + letter-print layout via `@media print`; cost/markup excluded | ✅ Complete |
 | 14C | Printable internal RO — mechanic worksheet auto-filled from RO concerns, vehicle, customer | ✅ Complete |
-| 14D | RO concerns → estimate job groups — concerns auto-populate as grouped sections in the estimate builder | ⬜ Not started |
+| 14D | RO concerns → estimate job groups — concerns auto-populate as grouped sections in the estimate builder | ✅ Complete |
+| 14E | Dedicated Presets page + improved job group removal (items ungroup in DB, not just UI) | ✅ Complete |
+
+---
+
+## Backlog / Future Phases (Not Yet Scheduled)
+
+### Pricing Markup Polish — Fixed Dollar Markup
+
+**Status:** Deferred. Do not implement until owner confirms.
+
+Currently `estimate_items.markup_percent` supports percentage-based markup only (e.g. cost $50 + 25% → $62.50). Owner has requested that a future phase support **fixed dollar markup** as an alternative:
+
+| Markup type | Example | Result |
+|---|---|---|
+| Percent (current) | Cost $50 + 25% | Customer price $62.50 |
+| Dollar (future) | Cost $50 + $20 | Customer price $70.00 |
+
+**What would be needed:**
+- New `markup_type text not null default 'percent'` column on `estimate_items` and `canned_job_items` (new migration)
+- `ItemForm` component: toggle/dropdown for markup type; auto-calc shows correct formula
+- `portalData.js`: `createEstimateItem`, `updateEstimateItem`, `updateCannedJobItem` accept `markup_type`
+- `ItemForm` in `PortalEstimates.jsx`: update auto-calculate logic for dollar mode
+- No change to customer-facing output — `cost_cents`, `markup_percent`, `markup_type` are staff-only in all paths
+- Migration is safe to re-run (`alter table ... add column if not exists`)
+
+**Security note:** `markup_type` must be excluded from `get-approval-estimate.js` and all customer-facing Netlify Functions, the same as `cost_cents` and `markup_percent`.
 
 ---
 

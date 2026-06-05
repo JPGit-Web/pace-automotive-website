@@ -1828,6 +1828,73 @@
 .portalEstItemTable td.money { font-family: monospace; text-align: right; white-space: nowrap; }
 .portalEstItemTable th.money { text-align: right; }
 
+/* ── Estimate job sections (Phase 14D) ── */
+.estJobSection {
+  border-top: 1px solid var(--p-border);
+}
+.estJobHeader {
+  padding: 10px 20px 8px;
+  background: var(--p-bg);
+}
+.estJobTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.estJobTitleInput {
+  flex: 1;
+  min-width: 140px;
+  font-size: .9rem;
+  font-weight: 700;
+  color: var(--p-navy);
+  border: 1.5px solid transparent;
+  border-radius: var(--p-radius-sm);
+  padding: 4px 8px;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+}
+.estJobTitleInput:hover { border-color: var(--p-border); }
+.estJobTitleInput:focus { border-color: var(--p-navy-light, #3a5a9a); background: var(--p-card-bg); }
+.estJobUngroupedTitle {
+  font-size: .78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--p-text-3);
+  padding: 4px 0;
+}
+.estJobNotesInput {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: .79rem;
+  color: var(--p-text-2);
+  border: 1.5px solid transparent;
+  border-radius: var(--p-radius-sm);
+  padding: 3px 8px;
+  background: transparent;
+  resize: none;
+  outline: none;
+  line-height: 1.4;
+  font-family: inherit;
+  min-height: 26px;
+}
+.estJobNotesInput:hover { border-color: var(--p-border); }
+.estJobNotesInput:focus { border-color: var(--p-border); background: var(--p-card-bg); }
+.estJobActions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.estJobUngrouped .estJobHeader {
+  background: var(--p-bg);
+  opacity: .85;
+}
+
 /* ── Estimate meta fields ── */
 .portalEstMetaGrid {
   display: grid;

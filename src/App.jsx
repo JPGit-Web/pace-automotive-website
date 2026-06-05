@@ -11,6 +11,7 @@ import PortalAppointments  from "./pages/portal/PortalAppointments";
 import PortalRepairOrders  from "./pages/portal/PortalRepairOrders";
 import PortalInspections   from "./pages/portal/PortalInspections";
 import PortalEstimates     from "./pages/portal/PortalEstimates";
+import PortalPresets       from "./pages/portal/PortalPresets";
 import PortalInvoices      from "./pages/portal/PortalInvoices";
 
 import ProtectedRoute      from "./components/portal/ProtectedRoute";
@@ -42,6 +43,7 @@ export default function App() {
       <Route path="/portal/repair-orders" element={protect(PortalRepairOrders)} />
       <Route path="/portal/inspections"   element={protect(PortalInspections)} />
       <Route path="/portal/estimates"     element={protect(PortalEstimates)} />
+      <Route path="/portal/presets"       element={protect(PortalPresets)} />
       <Route path="/portal/invoices"      element={protect(PortalInvoices)} />
 
       {/* ── Catch-all → public homepage ── */}

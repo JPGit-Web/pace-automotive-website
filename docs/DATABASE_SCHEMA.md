@@ -464,40 +464,35 @@ A nullable FK from `estimate_items` back to `canned_jobs` was considered to trac
 
 ---
 
-## Phase 14 — Planned Future Schema Additions
+## Phase 14D — ✅ Implemented: `estimate_jobs` + `estimate_items.estimate_job_id`
 
-These tables and columns are **not yet implemented**. They are planned for Phase 14 (Print, Document, and Detail Modal Workflow). Do not create migrations until Phase 14 implementation begins.
+Migration: `supabase/migrations/011_estimate_jobs.sql`
 
----
+### `estimate_jobs` table
 
-### Phase 14D — Planned: `estimate_jobs` (or `estimate_items` FK column)
-
-When RO concerns are used to auto-create grouped job sections in the estimate builder (Phase 14D), one of two approaches will be chosen after reviewing the existing estimate model:
-
-**Option A — New `estimate_jobs` table (preferred for clean grouping):**
+Groups estimate line items into named sections. Each job typically corresponds to one repair concern but can also be a manually created heading.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid | Primary key |
 | `estimate_id` | uuid | FK → `estimates(id)` on delete cascade |
-| `repair_order_concern_id` | uuid | Nullable. FK → `repair_order_concerns(id)` on delete set null. Links job to originating concern. |
-| `title` | text | Job/section heading shown to customer (e.g. "Engine noise on startup") |
-| `notes` | text | Nullable. Staff notes under this job, shown on customer-facing estimate and printout. |
-| `sort_order` | integer | Display order |
-| `is_active` | boolean | Default true. Soft delete. |
+| `repair_order_concern_id` | uuid | Nullable. FK → `repair_order_concerns(id)` on delete set null. Back-link to originating concern. |
+| `title` | text | Job heading (default `'Job'`). Shown to customers on approval page. |
+| `notes` | text | Nullable. Internal staff notes — never returned to customers. |
+| `sort_order` | integer | Display order. Seeded from concern sort_order. |
+| `is_active` | boolean | Default true. Soft-delete: set `false` to hide. |
 | `created_at` | timestamptz | Auto |
-| `updated_at` | timestamptz | Auto via trigger |
+| `updated_at` | timestamptz | Auto via `set_updated_at()` trigger |
 
-If this table is created, `estimate_items` would gain a nullable `estimate_job_id` FK column to group line items under a job.
+RLS: authenticated staff only. No anon policy. No DELETE policy.
 
-**Option B — FK column on `estimate_items` only (simpler, less structured):**
-- Add `repair_order_concern_id uuid null` to `estimate_items` directly.
-- Group items by concern at query/display time.
-- No separate job table needed.
+### `estimate_items.estimate_job_id` column
 
-Decision deferred until Phase 14D implementation begins. Review existing estimate approval, Helcim invoice, and customer-facing functions before choosing.
+| Column | Type | Notes |
+|---|---|---|
+| `estimate_job_id` | uuid | Nullable. FK → `estimate_jobs(id)` on delete set null. `null` = ungrouped. |
 
-**Security rule:** Any job notes or grouping headers must use the same customer-facing column allowlists as `estimate_items`. Internal-only notes must be filtered from `get-approval-estimate.js` and all customer-facing functions.
+**Security:** `estimate_jobs.notes` is excluded from `get-approval-estimate.js`. Only `id`, `title`, and `sort_order` are returned to customers. `cost_cents`, `markup_percent`, and `customer_unit_price_cents` remain staff-only.
 
 ---
 
@@ -522,11 +517,13 @@ appointment_requests
     └── repair_orders (optional, when converted)
 
 repair_orders
+    ├── repair_order_concerns []
     ├── inspection (1)
     │     └── inspection_items []
     │               └── inspection_photos []
     ├── estimates [] (versioned)
-    │     └── estimate_items []
+    │     ├── estimate_jobs []  (grouped by concern)
+    │     └── estimate_items [] (each optionally linked to an estimate_job)
     ├── approval_tokens []
     └── invoice (1)
 

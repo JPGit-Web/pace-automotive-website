@@ -8,6 +8,7 @@ const navItems = [
   { label: "Repair Orders", href: "/portal/repair-orders", icon: "fa-solid fa-screwdriver-wrench" },
   { label: "Inspections",   href: "/portal/inspections",   icon: "fa-solid fa-clipboard-check" },
   { label: "Estimates",     href: "/portal/estimates",     icon: "fa-solid fa-file-invoice-dollar" },
+  { label: "Presets",       href: "/portal/presets",       icon: "fa-solid fa-bolt" },
   { label: "Invoices",      href: "/portal/invoices",      icon: "fa-solid fa-receipt" },
 ];
 

@@ -921,10 +921,14 @@ export async function getEstimate(estimateId) {
     .from("estimates").select("*").eq("id", estimateId).single();
   if (error) throw error;
 
-  const { data: items } = await supabase
-    .from("estimate_items").select("*")
-    .eq("estimate_id", estimateId).eq("is_active", true)
-    .order("sort_order", { ascending: true });
+  const [itemsRes, jobsRes] = await Promise.all([
+    supabase.from("estimate_items").select("*")
+      .eq("estimate_id", estimateId).eq("is_active", true)
+      .order("sort_order", { ascending: true }),
+    supabase.from("estimate_jobs").select("*")
+      .eq("estimate_id", estimateId).eq("is_active", true)
+      .order("sort_order", { ascending: true }),
+  ]);
 
   let ro = null, customer = null, vehicle = null;
   if (est.repair_order_id) {
@@ -944,7 +948,7 @@ export async function getEstimate(estimateId) {
     }
   }
 
-  return { ...est, items: items || [], ro, customer, vehicle };
+  return { ...est, items: itemsRes.data || [], jobs: jobsRes.data || [], ro, customer, vehicle };
 }
 
 /** Create a draft estimate for a repair order. */
@@ -1042,6 +1046,7 @@ export async function createEstimateItem(estimateId, repairOrderId, itemData) {
       is_customer_visible:       itemData.is_customer_visible ?? true,
       notes:                     itemData.notes               || null,
       sort_order:                itemData.sort_order          ?? 0,
+      estimate_job_id:           itemData.estimate_job_id     ?? null,
       is_active:                 true,
     }])
     .select().single();
@@ -1063,7 +1068,8 @@ export async function createEstimateItem(estimateId, repairOrderId, itemData) {
 export async function updateEstimateItem(itemId, estimateId, itemData) {
   const ALLOWED = ["item_type","description","quantity","unit_price_cents",
                    "customer_unit_price_cents","cost_cents","markup_percent",
-                   "is_required","is_customer_visible","notes","approval_status","sort_order"];
+                   "is_required","is_customer_visible","notes","approval_status","sort_order",
+                   "estimate_job_id"];
   const payload = {};
   for (const k of ALLOWED) if (k in itemData) payload[k] = itemData[k] ?? null;
 
@@ -1107,6 +1113,102 @@ export async function softHideEstimateItem(itemId, estimateId) {
   if (error) throw error;
   await recalculateEstimateTotals(estimateId).catch(() => {});
   return data;
+}
+
+// ─────────────────────────────────────────────────────────────
+// ESTIMATE JOBS
+// ─────────────────────────────────────────────────────────────
+
+/** List active job sections for an estimate, ordered by sort_order. */
+export async function listEstimateJobs(estimateId) {
+  const { data, error } = await supabase
+    .from("estimate_jobs").select("*")
+    .eq("estimate_id", estimateId).eq("is_active", true)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Create a new job section for an estimate. */
+export async function createEstimateJob(estimateId, { title, notes, sort_order, repair_order_concern_id } = {}) {
+  const { data, error } = await supabase
+    .from("estimate_jobs")
+    .insert([{
+      estimate_id:             estimateId,
+      title:                   title?.trim() || "New Job",
+      notes:                   notes || null,
+      sort_order:              sort_order ?? 0,
+      repair_order_concern_id: repair_order_concern_id ?? null,
+      is_active:               true,
+    }])
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+/** Update a job section's title, notes, or sort_order. */
+export async function updateEstimateJob(id, fields) {
+  const ALLOWED = ["title", "notes", "sort_order"];
+  const payload = {};
+  for (const k of ALLOWED) if (k in fields) payload[k] = fields[k] ?? null;
+  if ("title" in payload && !payload.title?.trim()) payload.title = "Job";
+  const { data, error } = await supabase
+    .from("estimate_jobs").update(payload).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/** Soft-hide a job section (is_active = false). Items keep their estimate_job_id. */
+export async function softHideEstimateJob(id) {
+  const { data, error } = await supabase
+    .from("estimate_jobs").update({ is_active: false }).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/** Set estimate_job_id = null on all active items belonging to a job section.
+ *  Does NOT recalculate prices — only clears the grouping column. */
+export async function ungroupEstimateJobItems(estimateJobId) {
+  const { error } = await supabase
+    .from("estimate_items")
+    .update({ estimate_job_id: null })
+    .eq("estimate_job_id", estimateJobId)
+    .eq("is_active", true);
+  if (error) throw error;
+}
+
+/**
+ * Idempotent: if the estimate already has active job sections, return them unchanged.
+ * Otherwise, fetch active repair_order_concerns for the RO and create one job per concern.
+ * Returns the resulting array of active jobs (existing or newly created).
+ */
+export async function ensureEstimateJobsFromRepairOrder(estimateId, repairOrderId) {
+  const existing = await listEstimateJobs(estimateId);
+  if (existing.length > 0) return existing;
+
+  const { data: concerns } = await supabase
+    .from("repair_order_concerns")
+    .select("id, concern_text, sort_order")
+    .eq("repair_order_id", repairOrderId)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true });
+
+  if (!concerns?.length) return [];
+
+  const rows = concerns.map((c) => ({
+    estimate_id:             estimateId,
+    repair_order_concern_id: c.id,
+    title:                   c.concern_text,
+    notes:                   null,
+    sort_order:              c.sort_order,
+    is_active:               true,
+  }));
+
+  const { data: created, error } = await supabase
+    .from("estimate_jobs").insert(rows).select()
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return created ?? [];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1726,6 +1828,17 @@ export async function listCannedJobs() {
   return data;
 }
 
+/** List ALL canned job bundles including inactive, for management pages. */
+export async function listAllCannedJobs() {
+  const { data, error } = await supabase
+    .from("canned_jobs")
+    .select("id, name, description, category, sort_order, is_active")
+    .order("sort_order", { ascending: true })
+    .order("name",       { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
 /** Get a single canned job plus its items. */
 export async function getCannedJob(id) {
   const [jobRes, itemsRes] = await Promise.all([
@@ -1870,8 +1983,9 @@ export async function updateCannedJobItem(id, data) {
  * Copy all items from a canned job bundle into an estimate as new line items.
  * Calls recalculateEstimateTotals after all inserts.
  * Returns the array of newly created estimate_item rows.
+ * @param {string|null} estimateJobId - optional job section to assign all new items to
  */
-export async function addCannedJobToEstimate(estimateId, repairOrderId, cannedJobId) {
+export async function addCannedJobToEstimate(estimateId, repairOrderId, cannedJobId, estimateJobId = null) {
   // Fetch template items
   const items = await listCannedJobItems(cannedJobId);
   if (!items.length) return [];
@@ -1903,6 +2017,7 @@ export async function addCannedJobToEstimate(estimateId, repairOrderId, cannedJo
     notes:                     item.notes,
     approval_status:           "pending",
     sort_order:                baseSortOrder + idx,
+    estimate_job_id:           estimateJobId ?? null,
     is_active:                 true,
   }));
 

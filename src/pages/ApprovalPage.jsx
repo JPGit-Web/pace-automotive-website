@@ -223,6 +223,64 @@ export default function ApprovalPage() {
     ? [estData.vehicle.year, estData.vehicle.make, estData.vehicle.model].filter(Boolean).join(" ")
     : null;
 
+  /* Build job → items map for grouped rendering */
+  const hasJobs = estData.jobs?.length > 0;
+  const jobItemMap = {};
+  if (hasJobs) {
+    for (const job of estData.jobs) jobItemMap[job.id] = [];
+  }
+  const ungroupedApprovalItems = [];
+  for (const item of estData.items) {
+    if (hasJobs && item.estimate_job_id && jobItemMap[item.estimate_job_id]) {
+      jobItemMap[item.estimate_job_id].push(item);
+    } else {
+      ungroupedApprovalItems.push(item);
+    }
+  }
+
+  /* Render a single approval item row */
+  function ApprovalItemRow({ item }) {
+    const dec = decisions[item.id];
+    return (
+      <div style={S.itemRow}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:"12px", flexWrap:"wrap" }}>
+          <div style={{ flex:1 }}>
+            <p style={{ margin:"0 0 2px", fontWeight:600, color:"#1a1f2e" }}>
+              {item.description}
+              {item.is_required && (
+                <span style={{ marginLeft:8, fontSize:".65rem", fontWeight:700, color:"#b06d00", textTransform:"uppercase", background:"#fff8e6", padding:"2px 6px", borderRadius:8 }}>Required</span>
+              )}
+            </p>
+            <p style={{ margin:0, fontSize:".75rem", color:"#9aa0ae" }}>
+              {ITEM_TYPE_LABELS[item.item_type] ?? item.item_type} &nbsp;·&nbsp; Qty: {item.quantity}
+            </p>
+          </div>
+          <p style={{ margin:0, fontFamily:"monospace", fontWeight:700, fontSize:"1rem", color:"#0b1b3a", whiteSpace:"nowrap" }}>
+            {item.item_type === "discount" ? `-${fmtCents(item.line_total_cents)}` : fmtCents(item.line_total_cents)}
+          </p>
+        </div>
+        {item.is_required ? (
+          <p style={{ margin:"8px 0 0", fontSize:".78rem", color:"#1a8f5e", fontWeight:600 }}>
+            ✓ Included (required)
+          </p>
+        ) : (
+          <div style={S.decisionRow}>
+            <button type="button"
+              style={dec === "approved" ? S.btnApproveActive : S.btnApprove}
+              onClick={() => toggleDecision(item.id, "approved")}>
+              ✓ Approve
+            </button>
+            <button type="button"
+              style={dec === "declined" ? S.btnDeclineActive : S.btnDecline}
+              onClick={() => toggleDecision(item.id, "declined")}>
+              ✕ Decline
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <PageWrap>
       {/* Estimate header */}
@@ -256,56 +314,46 @@ export default function ApprovalPage() {
         </div>
       </div>
 
-      {/* Items */}
+      {/* Items — grouped or flat depending on whether jobs exist */}
       <form onSubmit={handleSubmit} noValidate>
-        <div style={S.card}>
-          <h2 style={{ margin:"0 0 4px", fontSize:"1rem", fontWeight:700, color:"#0b1b3a" }}>Work Items</h2>
-          <p style={{ margin:"0 0 16px", fontSize:".82rem", color:"#5a6478" }}>
-            Approve or decline each optional item. Required items are pre-approved.
-          </p>
-
-          {estData.items.map((item) => {
-            const dec = decisions[item.id];
-            return (
-              <div key={item.id} style={S.itemRow}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:"12px", flexWrap:"wrap" }}>
-                  <div style={{ flex:1 }}>
-                    <p style={{ margin:"0 0 2px", fontWeight:600, color:"#1a1f2e" }}>
-                      {item.description}
-                      {item.is_required && (
-                        <span style={{ marginLeft:8, fontSize:".65rem", fontWeight:700, color:"#b06d00", textTransform:"uppercase", background:"#fff8e6", padding:"2px 6px", borderRadius:8 }}>Required</span>
-                      )}
-                    </p>
-                    <p style={{ margin:0, fontSize:".75rem", color:"#9aa0ae" }}>
-                      {ITEM_TYPE_LABELS[item.item_type] ?? item.item_type} &nbsp;·&nbsp; Qty: {item.quantity}
-                    </p>
-                  </div>
-                  <p style={{ margin:0, fontFamily:"monospace", fontWeight:700, fontSize:"1rem", color:"#0b1b3a", whiteSpace:"nowrap" }}>
-                    {item.item_type === "discount" ? `-${fmtCents(item.line_total_cents)}` : fmtCents(item.line_total_cents)}
+        {hasJobs ? (
+          /* Grouped mode: one card per job, ungrouped items at end */
+          <>
+            {estData.jobs.map((job) => {
+              const jobItems = jobItemMap[job.id] ?? [];
+              if (!jobItems.length) return null;
+              return (
+                <div key={job.id} style={S.card}>
+                  <h2 style={{ margin:"0 0 12px", fontSize:"1rem", fontWeight:700, color:"#0b1b3a", borderBottom:"1px solid #d9cdb0", paddingBottom:"8px" }}>
+                    {job.title}
+                  </h2>
+                  <p style={{ margin:"-8px 0 14px", fontSize:".78rem", color:"#9aa0ae" }}>
+                    Approve or decline each optional item. Required items are pre-approved.
                   </p>
+                  {jobItems.map((item) => <ApprovalItemRow key={item.id} item={item} />)}
                 </div>
-                {item.is_required ? (
-                  <p style={{ margin:"8px 0 0", fontSize:".78rem", color:"#1a8f5e", fontWeight:600 }}>
-                    <i className="fa-solid fa-circle-check"></i> Included (required)
-                  </p>
-                ) : (
-                  <div style={S.decisionRow}>
-                    <button type="button"
-                      style={dec === "approved" ? S.btnApproveActive : S.btnApprove}
-                      onClick={() => toggleDecision(item.id, "approved")}>
-                      ✓ Approve
-                    </button>
-                    <button type="button"
-                      style={dec === "declined" ? S.btnDeclineActive : S.btnDecline}
-                      onClick={() => toggleDecision(item.id, "declined")}>
-                      ✕ Decline
-                    </button>
-                  </div>
-                )}
+              );
+            })}
+            {ungroupedApprovalItems.length > 0 && (
+              <div style={S.card}>
+                <h2 style={{ margin:"0 0 4px", fontSize:"1rem", fontWeight:700, color:"#0b1b3a" }}>Other Items</h2>
+                <p style={{ margin:"0 0 16px", fontSize:".82rem", color:"#5a6478" }}>
+                  Approve or decline each optional item. Required items are pre-approved.
+                </p>
+                {ungroupedApprovalItems.map((item) => <ApprovalItemRow key={item.id} item={item} />)}
               </div>
-            );
-          })}
-        </div>
+            )}
+          </>
+        ) : (
+          /* Flat mode: single card with all items */
+          <div style={S.card}>
+            <h2 style={{ margin:"0 0 4px", fontSize:"1rem", fontWeight:700, color:"#0b1b3a" }}>Work Items</h2>
+            <p style={{ margin:"0 0 16px", fontSize:".82rem", color:"#5a6478" }}>
+              Approve or decline each optional item. Required items are pre-approved.
+            </p>
+            {estData.items.map((item) => <ApprovalItemRow key={item.id} item={item} />)}
+          </div>
+        )}
 
         {/* Totals */}
         <div style={S.card}>
