@@ -163,7 +163,7 @@ export default function PortalRepairOrders() {
 
   /* ── Load detail + check for existing inspection ── */
   async function selectRO(ro) {
-    if (selected?.id === ro.id) { setSelected(null); setDetailData(null); setRoInspection(null); setHistoryCounts(null); return; }
+    if (selected?.id === ro.id) return; // modal already open for this RO
     setSelected(ro);
     setDetailLoading(true);
     setRoInspection(null);
@@ -297,6 +297,16 @@ export default function PortalRepairOrders() {
       if (detailData?.id === updated.id) setDetailData((d) => d ? { ...d, status: newStatus } : d);
     } catch { alert("Failed to update status. Please try again."); }
     finally { setChangingStatus(false); }
+  }
+
+  function closeRODetail() {
+    setSelected(null);
+    setDetailData(null);
+    setHistoryCounts(null);
+    setRoConcerns([]);
+    setRoInspection(null);
+    setRoEstimate(null);
+    setRoInvoice(null);
   }
 
   async function handleCancel() {
@@ -695,39 +705,40 @@ export default function PortalRepairOrders() {
         )}
       </div>
 
-      {/* Detail panel */}
+      {/* RO Detail Modal */}
       {selected && (
-        <div className="portalRODetail">
-          <div className="portalRODetailHeader">
-            <div>
-              <p className="portalRONumber">{selected.ro_number}</p>
-              <div className="portalROBadges">
-                <span className={`portalBadge ${statusClass(selected.status)}`}>
-                  {RO_STATUS_LABELS[selected.status] ?? selected.status}
-                </span>
-                <span className={`portalBadge ${selected.payment_status}`}>
-                  {PAYMENT_LABELS[selected.payment_status] ?? selected.payment_status}
-                </span>
-                <span style={{ fontSize:".78rem", color:"var(--p-text-3)" }}>
-                  Created {fmtDate(selected.created_at)}
-                </span>
+        <div className="portalModalOverlay" onClick={(e) => e.target === e.currentTarget && closeRODetail()}>
+          <div className="portalModalCard portalModalLg" role="dialog" aria-modal="true" aria-label={`Repair Order ${selected.ro_number}`}>
+            <div className="portalModalHeader">
+              <div>
+                <h2 className="portalModalTitle" style={{ fontFamily:"monospace", letterSpacing:".5px" }}>{selected.ro_number}</h2>
+                <div className="portalROBadges" style={{ marginTop:4 }}>
+                  <span className={`portalBadge ${statusClass(selected.status)}`}>
+                    {RO_STATUS_LABELS[selected.status] ?? selected.status}
+                  </span>
+                  <span className={`portalBadge ${selected.payment_status}`}>
+                    {PAYMENT_LABELS[selected.payment_status] ?? selected.payment_status}
+                  </span>
+                  <span style={{ fontSize:".75rem", color:"var(--p-text-3)" }}>
+                    Created {fmtDate(selected.created_at)}
+                  </span>
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"center" }}>
+                <button className="portalBtn portalBtnSecondary" onClick={openEdit} disabled={detailLoading}>
+                  <i className="fa-solid fa-pen"></i> Edit
+                </button>
+                {selected.status !== "cancelled" && (
+                  <button className="portalBtn portalBtnDanger" onClick={handleCancel} disabled={changingStatus}>
+                    <i className="fa-solid fa-ban"></i> Cancel RO
+                  </button>
+                )}
+                <button className="portalModalClose" onClick={closeRODetail}>
+                  <i className="fa-solid fa-xmark"></i>
+                </button>
               </div>
             </div>
-            <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"center" }}>
-              <button className="portalBtn portalBtnSecondary" onClick={openEdit} disabled={detailLoading}>
-                <i className="fa-solid fa-pen"></i> Edit
-              </button>
-              {selected.status !== "cancelled" && (
-                <button className="portalBtn portalBtnDanger" onClick={handleCancel} disabled={changingStatus}>
-                  <i className="fa-solid fa-ban"></i> Cancel RO
-                </button>
-              )}
-              <button style={{ background:"none", border:"none", cursor:"pointer", color:"var(--p-text-3)", fontSize:".82rem", fontFamily:"inherit" }}
-                onClick={() => { setSelected(null); setDetailData(null); setHistoryCounts(null); }}>
-                ✕ Close
-              </button>
-            </div>
-          </div>
+            <div className="portalModalBody">
 
           {detailLoading ? (
             <p style={{ color:"var(--p-text-3)", fontSize:".88rem" }}>Loading details…</p>
@@ -913,6 +924,8 @@ export default function PortalRepairOrders() {
           ) : (
             <p style={{ color:"var(--p-text-3)", fontSize:".88rem" }}>Could not load detail. Click to retry.</p>
           )}
+            </div>{/* portalModalBody */}
+          </div>{/* portalModalCard */}
         </div>
       )}
 

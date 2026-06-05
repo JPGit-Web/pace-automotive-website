@@ -633,23 +633,66 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 
 ---
 
-### Phase 14A Acceptance Criteria (Planning — not yet implemented)
+### Phase 14A — Detail View Modals + Modal Sizing
 
-**Detail view modals:**
-- [ ] RO, estimate, and invoice detail panels open as centered modal overlays instead of inline tiles below the list.
-- [ ] All existing actions work inside the modals: edit fields, change status, start inspection, create/view estimate, send approval, create Helcim invoice.
-- [ ] Deep-link support is preserved where practical. No data is lost when a modal is closed.
+**Implemented:**
+- RO detail converted from inline tile to `portalModalOverlay` + `portalModalCard portalModalLg` centered modal. Header contains RO number (monospace), status/payment badges, Edit button, Cancel RO button, and ✕ close. Click-outside-to-close via overlay.
+- Invoice detail converted from inline tile to `portalModalOverlay` + `portalModalCard portalModalLg` centered modal. Header contains invoice number (monospace) with RO reference, status/payment badges, Edit button, and ✕ close. Click-outside-to-close via overlay.
+- Estimate builder was already a dedicated full-page view — no modal conversion needed per spec.
+- `.portalModalLg` added: `max-width: min(1100px, 92vw); max-height: 90vh`.
+- `.portalCannedModal` enlarged: `max-width: min(1100px, 94vw)`. Layout height increased to `min(520px, 60vh)`.
+- All existing actions (edit, status change, start inspection, create/view estimate, send approval, create Helcim invoice, payment actions) preserved inside modals.
 
-**Modal sizing (owner-requested):**
-- [ ] Large management and detail modals use more of the available screen width and height — content should feel comfortable on a desktop browser without excessive scrolling.
-- [ ] The Manage Preset Jobs modal (Phase 13E) is enlarged so job details and line items can be viewed and edited without cramped spacing.
-- [ ] Scrolling is internal to the modal content area only — the page behind the modal does not scroll.
-- [ ] Modals are responsive: on smaller screens they expand to fill the viewport and allow internal scroll.
+**Acceptance criteria:**
+- [x] RO detail opens as a centered modal overlay.
+- [x] Invoice detail opens as a centered modal overlay.
+- [x] All existing actions work inside the modals.
+- [x] Large modals use more screen width/height — comfortable on desktop.
+- [x] Manage Preset Jobs modal enlarged.
+- [x] Scrolling is internal to modal content area; page behind does not scroll.
+- [x] Public website unaffected.
+- [x] No security regressions.
+- [x] No internal cost/markup visible in any customer-facing view.
 
-**Shared constraints:**
-- [ ] Public website is completely unaffected.
-- [ ] No new security regressions: all modal content is behind `ProtectedRoute`.
-- [ ] No internal cost, markup, or secrets appear in any customer-facing view.
+---
+
+### Phase 14B — Printable Customer Invoice
+
+**Implemented:**
+- `Print` button added to the invoice detail modal header (next to Edit).
+- `src/components/portal/InvoicePrintView.jsx` — new self-contained print component.
+  - Shop header: P.A.C.E. / Power Automotive Centre of Excellence, address, phone, email, website.
+  - Invoice meta: invoice number (monospace), RO number, invoice date, print date, payment status.
+  - Bill To: customer name, phone, email.
+  - Vehicle: year/make/model/trim, colour, VIN (monospace), license plate + province, odometer in/out.
+  - Customer Concerns: from `repair_order_concerns` (structured list); falls back to legacy `customer_concern` text.
+  - Line items table: description, type, qty, unit price, total. Uses `helcim_invoice_items` if available; falls back to approved `estimate_items` (customer-facing columns only).
+  - Totals: subtotal, GST (5%), grand total, amount paid (if any), balance due (green if paid).
+  - Invoice-level notes (no RO `internal_notes`).
+  - Signature block: customer + service advisor lines.
+  - Legal text: payment terms, storage notice, warranty, authorization acknowledgment.
+- `getHelcimInvoice` updated: fetches vehicle `trim/color/vin/license_plate/plate_province`, RO `mileage_in/mileage_out/customer_concern`, and active `repair_order_concerns`. Returns `printItems` fallback from estimate items (safe columns only: no `cost_cents`, `markup_percent`).
+- `@media print` CSS in `portal.css`: visibility trick hides all portal UI; shows only `.invPrintDoc`. Letter portrait, 0.7in margins. Professional black-on-white table layout.
+
+**Security:**
+- `cost_cents`, `markup_percent`, `customer_unit_price_cents` are never selected or rendered.
+- RO `internal_notes` are never included.
+- No secrets in `src/`.
+- Print view is rendered only inside the authenticated portal — no public URL.
+
+**Acceptance criteria:**
+- [x] Print button visible in invoice detail modal.
+- [x] Print preview shows only the customer invoice, not portal UI.
+- [x] Shop header, contact info, customer, vehicle, RO/invoice numbers appear.
+- [x] Line items show with customer-facing prices only.
+- [x] Subtotal / GST / Total / Balance Due are correct.
+- [x] Internal cost/markup do not appear.
+- [x] Internal notes do not appear.
+- [x] Existing invoice status/payment buttons unaffected.
+- [x] Helcim logic unchanged.
+- [x] No `.delete()` calls.
+- [x] No secrets in `src/`.
+- [x] Build passes.
 
 ---
 
@@ -679,8 +722,8 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 | 13D | Estimate line item internal cost, markup %, and customer price fields | ✅ Complete |
 | 13E | Canned jobs / preset job bundles — Add Preset Job button in estimate builder, preset picker modal, Manage Canned Jobs panel | ✅ Complete |
 | 13F | Horizontal estimate totals bar — full-width navy bar replacing the vertical totals box | ✅ Complete |
-| 14A | Detail view modals + modal sizing — RO, estimate, and invoice details as centered modals; large management modals use more screen width/height | ⬜ Not started |
-| 14B | Printable customer invoice — Print button + professional letter-print layout (no internal cost/markup) | ⬜ Not started |
+| 14A | Detail view modals + modal sizing — RO and invoice details as centered modals; `.portalModalLg`; Manage Preset Jobs enlarged | ✅ Complete |
+| 14B | Printable customer invoice — Print button + letter-print layout via `@media print`; cost/markup excluded | ✅ Complete |
 | 14C | Printable internal RO — mechanic worksheet auto-filled from RO concerns, vehicle, customer | ⬜ Not started |
 | 14D | RO concerns → estimate job groups — concerns auto-populate as grouped sections in the estimate builder | ⬜ Not started |
 

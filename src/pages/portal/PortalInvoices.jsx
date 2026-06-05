@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import PortalLayout from "../../components/portal/PortalLayout";
+import InvoicePrintView from "../../components/portal/InvoicePrintView";
 import { supabase } from "../../lib/supabase";
 import {
   listHelcimInvoices, getHelcimInvoice,
@@ -443,36 +444,60 @@ export default function PortalInvoices() {
         )}
       </div>
 
-      {/* Detail panel */}
+      {/* Invoice Detail Modal */}
       {(selected || detailLoading) && (
-        <div className="portalRODetail">
+        <div className="portalModalOverlay" onClick={(e) => e.target === e.currentTarget && setSelected(null)}>
+          <div className="portalModalCard portalModalLg" role="dialog" aria-modal="true" aria-label="Invoice Detail">
+            <div className="portalModalHeader">
+              <div>
+                {selected ? (
+                  <>
+                    <h2 className="portalModalTitle" style={{ fontFamily:"monospace", letterSpacing:".5px" }}>
+                      {selected.helcim_invoice_number || "(No invoice number yet)"}
+                      {selected.ro?.ro_number && (
+                        <span style={{ fontFamily:"inherit", fontWeight:400, fontSize:".75rem", color:"var(--p-text-2)", marginLeft:10 }}>
+                          RO: {selected.ro.ro_number}
+                        </span>
+                      )}
+                    </h2>
+                    <div className="portalROBadges" style={{ marginTop:4 }}>
+                      <span className={`portalBadge ${statusClass(selected.status)}`}>{INV_STATUS_LABELS[selected.status] ?? selected.status}</span>
+                      <span className={`portalBadge ${payClass(selected.payment_status)}`}>{PAY_STATUS_LABELS[selected.payment_status] ?? selected.payment_status}</span>
+                    </div>
+                  </>
+                ) : (
+                  <h2 className="portalModalTitle">Invoice</h2>
+                )}
+              </div>
+              <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"center" }}>
+                {selected && (
+                  <button className="portalBtn portalBtnSecondary" onClick={openEditModal}>
+                    <i className="fa-solid fa-pen"></i> Edit
+                  </button>
+                )}
+                {selected && (
+                  <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
+                    <button className="portalBtn portalBtnSecondary" onClick={() => window.print()}>
+                      <i className="fa-solid fa-print"></i> Print
+                    </button>
+                    <span
+                      className="invPrintHint"
+                      title="For a clean PDF, turn off browser Headers and footers in the print dialog."
+                    >
+                      <i className="fa-solid fa-circle-info"></i>
+                    </span>
+                  </div>
+                )}
+                <button className="portalModalClose" onClick={() => setSelected(null)}>
+                  <i className="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+            </div>
+            <div className="portalModalBody">
           {detailLoading ? (
             <p style={{ color:"var(--p-text-3)", fontSize:".88rem" }}>Loading invoice…</p>
           ) : selected ? (
             <>
-              {/* Header */}
-              <div className="portalRODetailHeader">
-                <div>
-                  <p className="portalRONumber" style={{ fontSize:"1rem" }}>
-                    {selected.helcim_invoice_number || "(No invoice number yet)"}
-                    <span style={{ fontFamily:"inherit", fontWeight:400, fontSize:".78rem", color:"var(--p-text-2)", marginLeft:10 }}>
-                      {selected.ro?.ro_number && `RO: ${selected.ro.ro_number}`}
-                    </span>
-                  </p>
-                  <div className="portalROBadges">
-                    <span className={`portalBadge ${statusClass(selected.status)}`}>{INV_STATUS_LABELS[selected.status] ?? selected.status}</span>
-                    <span className={`portalBadge ${payClass(selected.payment_status)}`}>{PAY_STATUS_LABELS[selected.payment_status] ?? selected.payment_status}</span>
-                  </div>
-                </div>
-                <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
-                  <button className="portalBtn portalBtnSecondary" onClick={openEditModal}>
-                    <i className="fa-solid fa-pen"></i> Edit
-                  </button>
-                  <button style={{ background:"none", border:"none", cursor:"pointer", color:"var(--p-text-3)", fontSize:".82rem", fontFamily:"inherit" }}
-                    onClick={() => setSelected(null)}>✕ Close</button>
-                </div>
-              </div>
-
               {/* Totals */}
               <div className="portalInvTotals">
                 <div className="portalInvTotalCell">
@@ -662,6 +687,8 @@ export default function PortalInvoices() {
               </div>
             </>
           ) : null}
+            </div>{/* portalModalBody */}
+          </div>{/* portalModalCard */}
         </div>
       )}
 
@@ -832,6 +859,8 @@ export default function PortalInvoices() {
           </div>
         </div>
       )}
+      {/* Print-only invoice — hidden on screen, revealed by @media print */}
+      {selected && <InvoicePrintView invoice={selected} />}
     </PortalLayout>
   );
 }

@@ -857,6 +857,11 @@
   overflow: hidden;
 }
 
+.portalModalLg {
+  max-width: min(1100px, 92vw);
+  max-height: 90vh;
+}
+
 .portalModalHeader {
   display: flex;
   align-items: center;
@@ -2338,8 +2343,8 @@
 
 /* Wider modal for the two-column preset picker and manage panels */
 .portalCannedModal {
-  max-width: 820px;
-  width: 96vw;
+  max-width: min(1100px, 94vw);
+  width: 94vw;
 }
 
 /* Modal body override: remove default padding so the two-column layout fills edge-to-edge */
@@ -2351,7 +2356,7 @@
 /* Two-column layout inside the modal body */
 .portalCannedLayout {
   display: flex;
-  height: 420px;
+  height: min(520px, 60vh);
   overflow: hidden;
 }
 
@@ -2492,4 +2497,275 @@
   .portalCannedLayout { flex-direction: column; height: auto; }
   .portalCannedSidebar { flex: 0 0 auto; border-right: none; border-bottom: 1px solid var(--p-border); max-height: 160px; }
   .portalCannedModal { max-width: 100%; }
+}
+
+
+/* ============================================================
+   PHASE 14B — Printable Customer Invoice
+   .invPrintDoc is hidden on screen; @media print reveals it
+   and hides everything else.
+   ============================================================ */
+
+/* ── Screen: hide the print view; style the print hint icon ── */
+@media screen {
+  .invPrintDoc { display: none !important; }
+  .invPrintHint {
+    color: var(--p-text-3);
+    font-size: .88rem;
+    cursor: default;
+    line-height: 1;
+  }
+  .invPrintHint:hover { color: var(--p-navy); }
+}
+
+/* ── Print: show only the print view ── */
+@media print {
+  @page { size: letter portrait; margin: 0.55in; }
+
+  /* Visibility trick: hide everything, then reveal only the invoice */
+  body * { visibility: hidden !important; }
+  .invPrintDoc,
+  .invPrintDoc * { visibility: visible !important; }
+  .invPrintDoc {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    background: #fff;
+    color: #000;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11pt;
+    line-height: 1.5;
+    padding: 0;
+    margin: 0;
+  }
+
+  /* ── Header ── */
+  .invPrintHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2pt solid #000;
+    padding-bottom: 12pt;
+    margin-bottom: 12pt;
+  }
+  .invPrintShopTitle {
+    font-size: 15pt;
+    font-weight: bold;
+    margin-bottom: 2pt;
+  }
+  .invPrintShopTagline {
+    font-size: 10pt;
+    color: #555;
+    font-style: italic;
+  }
+  .invPrintHeaderContact {
+    text-align: right;
+    font-size: 10pt;
+    line-height: 1.65;
+    color: #333;
+  }
+
+  /* ── Title + Meta ── */
+  .invPrintDocTitle {
+    font-size: 26pt;
+    font-weight: bold;
+    letter-spacing: 2.5pt;
+    margin: 8pt 0 10pt;
+  }
+  .invPrintMetaRow {
+    display: flex;
+    gap: 22pt;
+    flex-wrap: wrap;
+    margin-bottom: 14pt;
+    padding-bottom: 12pt;
+    border-bottom: 1pt solid #bbb;
+  }
+  .invPrintMetaItem {
+    display: flex;
+    flex-direction: column;
+    gap: 2pt;
+  }
+  .invPrintMetaLabel {
+    font-size: 8pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.6pt;
+    color: #666;
+  }
+  .invPrintMetaValue {
+    font-size: 11pt;
+  }
+
+  /* ── Bill To / Vehicle ── */
+  .invPrintBillVehicle {
+    display: flex;
+    gap: 20pt;
+    margin-bottom: 12pt;
+    padding-bottom: 12pt;
+    border-bottom: 1pt solid #bbb;
+  }
+  .invPrintCol {
+    flex: 1;
+  }
+  .invPrintColTitle {
+    font-size: 8pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.6pt;
+    color: #555;
+    border-bottom: 1pt solid #bbb;
+    padding-bottom: 4pt;
+    margin-bottom: 6pt;
+  }
+  .invPrintColValue {
+    font-size: 11pt;
+    line-height: 1.65;
+  }
+
+  /* ── Concerns ── */
+  .invPrintConcerns {
+    margin-bottom: 12pt;
+    padding-bottom: 12pt;
+    border-bottom: 1pt solid #bbb;
+  }
+  .invPrintConcernsTitle {
+    font-size: 8pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.6pt;
+    color: #555;
+    margin-bottom: 5pt;
+  }
+  .invPrintConcernsList {
+    margin: 0;
+    padding-left: 16pt;
+    font-size: 11pt;
+    line-height: 1.65;
+  }
+
+  /* ── Line Items Table ── */
+  .invPrintTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 12pt;
+    font-size: 10.5pt;
+    page-break-inside: auto;
+  }
+  .invPrintTable thead tr {
+    background: #1a1a1a;
+    color: #fff;
+    page-break-inside: avoid;
+    page-break-after: avoid;
+  }
+  .invPrintTable th {
+    text-align: left;
+    padding: 6pt 8pt;
+    font-size: 8.5pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.4pt;
+  }
+  .invPrintTable td {
+    padding: 5.5pt 8pt;
+    border-bottom: 0.5pt solid #ddd;
+    vertical-align: top;
+    font-size: 10.5pt;
+  }
+  .invPrintTable tbody tr:nth-child(even) td {
+    background: #f5f5f5;
+  }
+  .invPrintRight {
+    text-align: right !important;
+  }
+  .invPrintTable th.invPrintRight {
+    text-align: right;
+  }
+
+  /* ── Totals ── */
+  .invPrintTotalsWrap {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 14pt;
+  }
+  .invPrintTotalsTable {
+    width: 220pt;
+  }
+  .invPrintTotalRow {
+    display: flex;
+    justify-content: space-between;
+    padding: 4pt 2pt;
+    font-size: 11pt;
+    border-bottom: 0.5pt dotted #ccc;
+  }
+  .invPrintTotalGrand {
+    font-weight: bold;
+    font-size: 13pt;
+    border-bottom: 1.5pt solid #000 !important;
+    padding-bottom: 5pt;
+  }
+  .invPrintBalanceDue {
+    font-weight: bold;
+    font-size: 14pt;
+    border-bottom: none !important;
+    border-top: 1.5pt solid #000;
+    margin-top: 3pt;
+    padding-top: 5pt;
+    color: #000;
+  }
+  .invPrintBalanceDue.invPrintBalancePaid {
+    color: #1a7a50;
+  }
+
+  /* ── Notes ── */
+  .invPrintNotes {
+    border: 0.75pt solid #ccc;
+    padding: 9pt 11pt;
+    margin-bottom: 14pt;
+    font-size: 10.5pt;
+    page-break-inside: avoid;
+  }
+  .invPrintNotesTitle {
+    font-size: 8pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.6pt;
+    color: #555;
+    margin-bottom: 5pt;
+  }
+
+  /* ── Signature ── */
+  .invPrintSignature {
+    display: flex;
+    gap: 32pt;
+    margin-top: 20pt;
+    margin-bottom: 14pt;
+    page-break-inside: avoid;
+  }
+  .invPrintSigBlock {
+    flex: 1;
+  }
+  .invPrintSigLine {
+    border-top: 1pt solid #000;
+    margin-top: 28pt;
+    margin-bottom: 5pt;
+  }
+  .invPrintSigLabel {
+    font-size: 9pt;
+    color: #555;
+  }
+
+  /* ── Legal ── */
+  .invPrintLegal {
+    border-top: 0.75pt solid #aaa;
+    padding-top: 8pt;
+    font-size: 8.5pt;
+    color: #555;
+    line-height: 1.6;
+    page-break-inside: avoid;
+  }
+  .invPrintLegal p {
+    margin: 0 0 5pt;
+  }
 }

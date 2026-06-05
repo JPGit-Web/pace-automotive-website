@@ -395,14 +395,14 @@ None of these lists include `cost_cents`, `markup_percent`, or `customer_unit_pr
 
 These rules apply when Phase 14 is implemented. Record them here so they are not forgotten during implementation.
 
-### 14B — Printable Customer Invoice
+### 14B — Printable Customer Invoice ✅ Implemented
 
-- The customer invoice print layout must use only customer-facing price fields: `unit_price_cents`, `line_total_cents`, `subtotal_cents`, `tax_cents`, `total_cents`, `amount_due_cents`.
-- `cost_cents`, `markup_percent`, and `customer_unit_price_cents` must **never** appear on the printed customer invoice.
-- Internal notes (staff-only fields on estimate items or repair orders) must not appear unless owners explicitly approve each field.
-- The print layout must be rendered inside the authenticated staff portal only — it must not be accessible at a public URL without a valid session or approval token.
-- If a printable route is added (e.g. `/portal/invoice/:id/print`), it must be wrapped in `ProtectedRoute`.
-- No card data, Helcim API tokens, service role keys, or raw approval tokens may appear in print output or in the JavaScript that generates it.
+- ✅ Print layout uses only customer-facing price fields: `unit_price_cents`, `line_total_cents`, `subtotal_cents`, `tax_cents`, `total_cents`, `amount_due_cents`, `amount_paid_cents`, `amount_due_cents`.
+- ✅ `cost_cents`, `markup_percent`, and `customer_unit_price_cents` are never selected or rendered anywhere in `InvoicePrintView.jsx`.
+- ✅ RO `internal_notes` is not included. Invoice-level `notes` field is shown (customer-facing).
+- ✅ Print layout is rendered inside `PortalInvoices.jsx` (behind `ProtectedRoute`) — no public URL. No separate print route was added.
+- ✅ No card data, Helcim API tokens, service role keys, or raw approval tokens appear in print output.
+- ✅ `getHelcimInvoice` fallback to `estimate_items` explicitly selects only: `id, description, quantity, unit_price_cents, line_total_cents, item_type, sort_order` — `cost_cents` and `markup_percent` are excluded.
 
 ### 14C — Printable Internal Repair Order
 

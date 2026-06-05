@@ -525,10 +525,11 @@ export async function getHelcimInvoice(invoiceId) {
     .eq("helcim_invoice_id", invoiceId)
     .order("sort_order", { ascending: true });
 
-  let ro = null, customer = null, vehicle = null, estimate = null;
+  let ro = null, customer = null, vehicle = null, estimate = null, concerns = [];
   if (inv.repair_order_id) {
     const { data: roData } = await supabase
-      .from("repair_orders").select("id, ro_number, customer_id, vehicle_id")
+      .from("repair_orders")
+      .select("id, ro_number, customer_id, vehicle_id, mileage_in, mileage_out, customer_concern")
       .eq("id", inv.repair_order_id).single();
     ro = roData;
     if (ro?.customer_id) {
@@ -538,9 +539,17 @@ export async function getHelcimInvoice(invoiceId) {
     }
     if (ro?.vehicle_id) {
       const { data } = await supabase.from("vehicles")
-        .select("id, year, make, model").eq("id", ro.vehicle_id).single();
+        .select("id, year, make, model, trim, color, vin, license_plate, plate_province")
+        .eq("id", ro.vehicle_id).single();
       vehicle = data;
     }
+    const { data: concernData } = await supabase
+      .from("repair_order_concerns")
+      .select("id, concern_text, sort_order")
+      .eq("repair_order_id", inv.repair_order_id)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+    concerns = concernData ?? [];
   }
   if (inv.estimate_id) {
     const { data } = await supabase.from("estimates")
@@ -549,7 +558,20 @@ export async function getHelcimInvoice(invoiceId) {
     estimate = data;
   }
 
-  return { ...inv, items: items || [], ro, customer, vehicle, estimate };
+  // Fallback: if no helcim_invoice_items exist, pull customer-facing estimate items for printing.
+  // Only safe columns selected — cost_cents and markup_percent are intentionally excluded.
+  let printItems = items?.length ? items : [];
+  if (!printItems.length && inv.estimate_id) {
+    const { data: estItems } = await supabase
+      .from("estimate_items")
+      .select("id, description, quantity, unit_price_cents, line_total_cents, item_type, sort_order")
+      .eq("estimate_id", inv.estimate_id)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+    printItems = estItems ?? [];
+  }
+
+  return { ...inv, items: items || [], printItems, ro, customer, vehicle, estimate, concerns };
 }
 
 /** Get the most recent invoice for a repair order (null if none). */
