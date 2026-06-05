@@ -411,50 +411,56 @@ Three staff-only pricing columns added to `estimate_items`:
 
 ---
 
-### Planned (Phase 13E+): `canned_jobs`
+### ✅ Implemented (Phase 13E): `canned_jobs`
 
-Saved job templates that staff can insert into estimates with one click.
+Saved job bundle templates that staff can insert into estimates with one click.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid | Primary key |
 | `name` | text | Display name (e.g. "Oil Change Package") |
-| `description` | text | Nullable. Longer description or internal notes |
-| `item_type` | text | Default type: `'labor'`, `'part'`, etc. |
-| `default_price_cents` | integer | Default customer-facing price in cents |
-| `is_active` | boolean | Default true. Soft delete |
+| `description` | text | Nullable. Shown in preset picker |
+| `category` | text | Nullable. Groups jobs in the picker (e.g. "Brakes") |
+| `is_active` | boolean | Default true. Soft delete — set false to hide from picker |
 | `sort_order` | integer | Display order in picker |
 | `created_at` | timestamptz | Auto |
 | `updated_at` | timestamptz | Auto via trigger |
 
+**RLS:** Authenticated staff only. No anon access. No DELETE policy.
+
 ---
 
-### Planned (Phase 13D+): `canned_job_items` (optional, for bundled jobs)
+### ✅ Implemented (Phase 13E): `canned_job_items`
 
-Sub-items within a canned job. Allows a single customer-facing line to have internal cost breakdown (e.g. "Brake Job" = labour + front pads + rotors).
+Individual line items within a canned job bundle. When a bundle is added to an estimate, each row is copied as a new `estimate_items` row.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid | Primary key |
 | `canned_job_id` | uuid | FK → `canned_jobs(id)` on delete cascade |
-| `description` | text | e.g. "Front Brake Pads" |
-| `item_type` | text | `'labor'`, `'part'`, etc. |
-| `cost_cents` | integer | Nullable. Internal cost |
-| `default_price_cents` | integer | Default customer price |
-| `sort_order` | integer | Display order |
+| `item_type` | text | Default `'labor'`. Same values as `estimate_items.item_type` |
+| `description` | text | Not null |
+| `quantity` | numeric(10,2) | Default 1 |
+| `cost_cents` | int4 | **STAFF-ONLY.** Nullable. Internal cost. Never sent to customers |
+| `markup_percent` | numeric(8,2) | **STAFF-ONLY.** Nullable. Never sent to customers |
+| `unit_price_cents` | int4 | Customer-facing unit price. Copied to `estimate_items.unit_price_cents` |
+| `customer_unit_price_cents` | int4 | Nullable. Mirrors `unit_price_cents` for future override support |
+| `is_required` | boolean | Default false |
+| `is_customer_visible` | boolean | Default true |
+| `notes` | text | Nullable |
+| `sort_order` | integer | Display order within the bundle |
 | `created_at` | timestamptz | Auto |
+| `updated_at` | timestamptz | Auto via trigger |
+
+**RLS:** Authenticated staff only. No anon access. No DELETE policy.
+
+**Security note:** `cost_cents` and `markup_percent` are staff-only. They are copied into `estimate_items` when a bundle is applied, but those columns on `estimate_items` are also staff-only and are already excluded from all four customer-facing Netlify Functions by explicit column allowlists (see SECURITY_PLAN.md §12).
 
 ---
 
-### Planned column addition: `estimate_items.canned_job_id` (Phase 13E+)
+### Deferred: `estimate_items.canned_job_id` column
 
-When canned/preset jobs are implemented, a nullable FK column will be added:
-
-| Column | Type | Notes |
-|---|---|---|
-| `canned_job_id` | uuid | Nullable. FK → `canned_jobs(id)` on delete set null. Tracks which canned job generated this item. |
-
-Do not add this column until Phase 13E+ implementation begins.
+A nullable FK from `estimate_items` back to `canned_jobs` was considered to track which preset generated each item. This column was **not added** in Phase 13E — the simpler copy-and-paste approach was used instead (no FK needed for the feature to work). If traceability or re-sync functionality is needed later, this column can be added as a separate migration.
 
 ---
 

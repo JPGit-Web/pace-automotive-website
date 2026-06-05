@@ -368,6 +368,29 @@ None of these lists include `cost_cents`, `markup_percent`, or `customer_unit_pr
 
 ---
 
+## 13. Phase 13E — Canned Jobs / Preset Job Bundles Security Notes (Complete)
+
+### Isolation of cost_cents and markup_percent on canned_job_items
+
+`canned_job_items.cost_cents` and `canned_job_items.markup_percent` are staff-only fields. When `addCannedJobToEstimate()` copies items to `estimate_items`, it preserves these values in `estimate_items.cost_cents` and `estimate_items.markup_percent`. The isolation guarantees from Phase 13D (explicit column allowlists in all four customer-facing Netlify Functions) automatically protect these copied values — no additional changes to customer-facing functions are required.
+
+**Columns that remain STAFF-ONLY on both `canned_job_items` and `estimate_items`:**
+- `cost_cents`
+- `markup_percent`
+
+**Confirmed zero exposure in customer-facing functions (Phase 13E audit):**
+
+| Function | Result |
+|---|---|
+| `get-approval-estimate.js` | 0 references to `cost_cents`, `markup_percent`, `customer_unit_price_cents` |
+| `send-estimate-approval.js` | 0 references |
+| `submit-estimate-approval.js` | 0 references |
+| `helcim-create-invoice.js` | 0 references |
+
+**Rule:** The Manage Canned Jobs panel and `addCannedJobToEstimate()` are staff-portal-only operations behind `ProtectedRoute`. No canned job management endpoint is exposed to unauthenticated users.
+
+---
+
 ## 14. Phase 14 — Print, Document, and Modal Security Notes (Planning)
 
 These rules apply when Phase 14 is implemented. Record them here so they are not forgotten during implementation.

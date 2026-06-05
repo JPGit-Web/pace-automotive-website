@@ -130,17 +130,19 @@ The goal of Version 1 is a working, secure internal tool that replaces paper and
 - ✅ **13B** — Inline new customer + inline new vehicle inside RO intake; multiple concerns per repair order (`repair_order_concerns` table)
 - ✅ **13C** — Customer and vehicle service history view (read-only consolidated view of all ROs, concerns, inspections, estimates, invoices per customer or vehicle; compact history strip on RO detail panel)
 - ✅ **13D** — Estimate line item internal pricing: staff-only cost_cents, markup_percent, and customer_unit_price_cents columns; auto-calculation in Add/Edit Item modal; cost/markup never exposed to customer-facing pages, emails, or functions
-- ⬜ **13E+** — Preset/canned jobs for common services; horizontal estimate totals bar
+- ✅ **13E** — Canned jobs / preset job bundles: `canned_jobs` + `canned_job_items` tables; "Add Preset Job" picker modal with preview; "Manage Preset Jobs" panel; `addCannedJobToEstimate` helper; cost/markup never exposed to any customer-facing path
+- ✅ **13F** — Horizontal estimate totals bar: full-width navy bar showing Subtotal / GST / Total (and Approved if applicable) in a single horizontal row; replaces the vertical totals box; Customer Actions card moved below as a full-width row of buttons
 
 **Phase 14 — Print, Document, and Detail Modal Workflow (owner-requested, planning only):**
 
-These are larger than the Phase 13 incremental edits. They touch portal detail UI, printable document layouts, and estimate structure. Do not implement until Phase 13E+ is complete and the estimate/invoice data model is stable.
+These are larger than the Phase 13 incremental edits. They touch portal detail UI, printable document layouts, and estimate structure. Do not implement until Phase 13F is complete and the estimate/invoice data model is stable.
 
-- ⬜ **14A — Detail View Modals**
+- ⬜ **14A — Detail View Modals and Modal Sizing**
   - RO, estimate, and invoice detail panels currently appear as large inline tiles below the list. Convert to centered modal/popup overlays.
   - Preserve all existing actions inside modals: edit, status changes, start inspection, create/view estimate, send approval, create Helcim invoice, etc.
   - Keep deep-link support where practical. No data loss on modal close.
   - Mobile/tablet behaviour must remain usable.
+  - **Modal sizing (owner-requested):** Large management and detail modals should use more of the available screen width and height so content feels comfortable on desktop. Cramped modals with excessive scrolling are a usability problem. Specific example: the Manage Preset Jobs modal (Phase 13E) is too small for its content — it should be revisited and made larger during 14A. Scrolling should be internal to the modal content area only, not full-page. Smaller screens must remain responsive (modal expands to fill the viewport, content scrolls within).
 
 - ⬜ **14B — Printable Customer Invoice**
   - Add a Print button to invoice detail.
@@ -170,8 +172,8 @@ These are larger than the Phase 13 incremental edits. They touch portal detail U
   - Must not break existing approval workflow, invoice creation, or cost/markup isolation.
 
 **Phase ordering recommendation:**
-1. Complete Phase 13E+ (canned jobs, totals bar) if still planned.
-2. Phase 14D (concern → job grouping) may need to connect with canned jobs and pricing — consider implementing after 13E+.
+1. Complete Phase 13F (horizontal estimate totals bar) if still planned.
+2. Phase 14D (concern → job grouping) may need to connect with canned jobs and pricing — consider implementing after 13F.
 3. Phase 14B/14C print layouts are best implemented after the estimate/invoice structure is stable (i.e., after 14D).
 4. Phase 14A (detail modals) can be done independently of 14B–14D.
 

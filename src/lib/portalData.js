@@ -1689,6 +1689,214 @@ export async function getVehicleServiceHistory(vehicleId) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// CANNED JOBS (Phase 13E)
+// ─────────────────────────────────────────────────────────────
+
+/** List all active canned job bundles, ordered by sort_order then name. */
+export async function listCannedJobs() {
+  const { data, error } = await supabase
+    .from("canned_jobs")
+    .select("id, name, description, category, sort_order")
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+    .order("name",       { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+/** Get a single canned job plus its items. */
+export async function getCannedJob(id) {
+  const [jobRes, itemsRes] = await Promise.all([
+    supabase.from("canned_jobs")
+      .select("id, name, description, category, sort_order, is_active")
+      .eq("id", id)
+      .single(),
+    supabase.from("canned_job_items")
+      .select("id, canned_job_id, item_type, description, quantity, cost_cents, markup_percent, unit_price_cents, customer_unit_price_cents, is_required, is_customer_visible, notes, sort_order")
+      .eq("canned_job_id", id)
+      .order("sort_order", { ascending: true }),
+  ]);
+  if (jobRes.error) throw jobRes.error;
+  return { ...jobRes.data, items: itemsRes.data ?? [] };
+}
+
+/** Create a new canned job bundle. Returns the created row. */
+export async function createCannedJob(data) {
+  const ALLOWED = ["name", "description", "category", "sort_order"];
+  const fields = {};
+  for (const col of ALLOWED) {
+    const v = data[col];
+    fields[col] = (typeof v === "string" && v.trim() === "") ? null : (v ?? null);
+  }
+  if (fields.name) fields.name = fields.name.trim();
+  if (fields.sort_order == null) fields.sort_order = 0;
+
+  const { data: created, error } = await supabase
+    .from("canned_jobs")
+    .insert([fields])
+    .select()
+    .single();
+  if (error) throw error;
+  return created;
+}
+
+/** Update an existing canned job. Returns the updated row. */
+export async function updateCannedJob(id, fields) {
+  const ALLOWED = ["name", "description", "category", "sort_order", "is_active"];
+  const payload = {};
+  for (const col of ALLOWED) {
+    if (col in fields) {
+      const v = fields[col];
+      payload[col] = (typeof v === "string" && v.trim() === "") ? null : v;
+    }
+  }
+  if (payload.name) payload.name = payload.name.trim();
+
+  const { data, error } = await supabase
+    .from("canned_jobs")
+    .update(payload)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/** Soft-hide a canned job (sets is_active = false). Does not delete any rows. */
+export async function softHideCannedJob(id) {
+  return updateCannedJob(id, { is_active: false });
+}
+
+/** List all items for a given canned job, ordered by sort_order. */
+export async function listCannedJobItems(cannedJobId) {
+  const { data, error } = await supabase
+    .from("canned_job_items")
+    .select("id, canned_job_id, item_type, description, quantity, cost_cents, markup_percent, unit_price_cents, customer_unit_price_cents, is_required, is_customer_visible, notes, sort_order")
+    .eq("canned_job_id", cannedJobId)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+/** Create a new item inside a canned job. Returns the created row. */
+export async function createCannedJobItem(cannedJobId, data) {
+  const unitCents = dollarsToCents(data.unit_price_dollars ?? 0);
+  const costCents = (data.cost_dollars != null && data.cost_dollars !== "")
+    ? dollarsToCents(data.cost_dollars) : null;
+  const markupPct = (data.markup_percent != null && data.markup_percent !== "")
+    ? parseFloat(data.markup_percent) : null;
+
+  const { data: created, error } = await supabase
+    .from("canned_job_items")
+    .insert([{
+      canned_job_id:             cannedJobId,
+      item_type:                 data.item_type          ?? "labor",
+      description:               data.description.trim(),
+      quantity:                  parseFloat(data.quantity ?? 1),
+      cost_cents:                costCents,
+      markup_percent:            markupPct,
+      unit_price_cents:          unitCents,
+      customer_unit_price_cents: Math.max(0, unitCents),
+      is_required:               data.is_required        ?? false,
+      is_customer_visible:       data.is_customer_visible ?? true,
+      notes:                     data.notes?.trim()       || null,
+      sort_order:                data.sort_order          ?? 0,
+    }])
+    .select()
+    .single();
+  if (error) throw error;
+  return created;
+}
+
+/** Update an existing canned job item. Returns the updated row. */
+export async function updateCannedJobItem(id, data) {
+  const ALLOWED = [
+    "item_type", "description", "quantity",
+    "unit_price_cents", "customer_unit_price_cents",
+    "cost_cents", "markup_percent",
+    "is_required", "is_customer_visible", "notes", "sort_order",
+  ];
+  const payload = {};
+  for (const col of ALLOWED) {
+    if (col in data) payload[col] = data[col];
+  }
+
+  // Accept dollar-string inputs and convert
+  if ("unit_price_dollars" in data) {
+    payload.unit_price_cents          = dollarsToCents(data.unit_price_dollars ?? 0);
+    payload.customer_unit_price_cents = Math.max(0, payload.unit_price_cents);
+  }
+  if ("cost_dollars" in data) {
+    payload.cost_cents = (data.cost_dollars != null && data.cost_dollars !== "")
+      ? dollarsToCents(data.cost_dollars) : null;
+  }
+  if ("markup_percent" in data && !(data.markup_percent == null || data.markup_percent === "")) {
+    payload.markup_percent = parseFloat(data.markup_percent);
+  }
+
+  const { data: updated, error } = await supabase
+    .from("canned_job_items")
+    .update(payload)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return updated;
+}
+
+/**
+ * Copy all items from a canned job bundle into an estimate as new line items.
+ * Calls recalculateEstimateTotals after all inserts.
+ * Returns the array of newly created estimate_item rows.
+ */
+export async function addCannedJobToEstimate(estimateId, repairOrderId, cannedJobId) {
+  // Fetch template items
+  const items = await listCannedJobItems(cannedJobId);
+  if (!items.length) return [];
+
+  // Determine next sort_order base so new items appear at the end
+  const { data: existing } = await supabase
+    .from("estimate_items")
+    .select("sort_order")
+    .eq("estimate_id", estimateId)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: false })
+    .limit(1);
+  const baseSortOrder = ((existing?.[0]?.sort_order) ?? -1) + 1;
+
+  // Build insert payload (preserves cost/markup, sets customer price = unit_price)
+  const rows = items.map((item, idx) => ({
+    estimate_id:               estimateId,
+    repair_order_id:           repairOrderId,
+    item_type:                 item.item_type,
+    description:               item.description,
+    quantity:                  item.quantity,
+    cost_cents:                item.cost_cents,
+    markup_percent:            item.markup_percent,
+    unit_price_cents:          item.unit_price_cents,
+    customer_unit_price_cents: item.customer_unit_price_cents ?? item.unit_price_cents,
+    line_total_cents:          Math.round(item.quantity * item.unit_price_cents),
+    is_required:               item.is_required,
+    is_customer_visible:       item.is_customer_visible,
+    notes:                     item.notes,
+    approval_status:           "pending",
+    sort_order:                baseSortOrder + idx,
+    is_active:                 true,
+  }));
+
+  const { data: created, error } = await supabase
+    .from("estimate_items")
+    .insert(rows)
+    .select();
+  if (error) throw error;
+
+  // Recalculate estimate totals
+  await recalculateEstimateTotals(estimateId);
+
+  return created;
+}
+
+// ─────────────────────────────────────────────────────────────
 // DASHBOARD
 // ─────────────────────────────────────────────────────────────
 

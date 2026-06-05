@@ -463,35 +463,26 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 
 ---
 
-### E. Preset Jobs / Canned Jobs
+### E. Preset Jobs / Canned Jobs ✅ Complete (Phase 13E)
 
 **Problem:** Staff frequently add the same line items to estimates (e.g., oil change, brake pads, diagnostic fee). Entering them manually every time is slow and error-prone.
 
-**Planned solution:**
-- Add a `canned_jobs` table of saved job templates.
-- Each canned job has a name, default price, and optionally sub-items.
-- From the estimate builder, staff can click "Add from canned job" to insert a pre-configured line item.
-- Examples:
-  - "Oil Change Package" → $89.99 labor + $45 oil filter (shown as one line or expanded)
-  - "Diagnostic Fee" → $120 flat
-  - "Tire Swap (seasonal)" → $80
+**Implemented solution:**
+- New tables `canned_jobs` and `canned_job_items` (migration `010_canned_jobs.sql`).
+- Each canned job has a name, category, sort order, and multiple line items with full pricing (cost, markup, customer price).
+- **"Add Preset Job" button** added next to "Add Item" in the estimate builder line items header.
+- **Preset picker modal** — two-column layout: job list on the left, item preview table on the right. Confirm adds all items to the estimate in one click.
+- **"Presets" / Manage Canned Jobs button** accessible from the Customer Actions panel in the estimate builder.
+- **Manage panel** — create/edit/deactivate canned jobs; add/edit items inline with the same cost/markup/customer-price fields as estimate items.
+- `addCannedJobToEstimate()` helper copies all canned job items to the estimate preserving cost, markup, and pricing; calls `recalculateEstimateTotals` after insert.
+- Internal cost and markup on canned job items are **never exposed** to customer-facing pages, approval emails, or Netlify Functions. Only `unit_price_cents` (customer price) flows into estimates.
+- RLS: authenticated staff only. No anon access. No DELETE policy (soft deactivate via `is_active = false`).
 
-**Potential schema — new tables:**
-```sql
--- canned_jobs
-id uuid, name text, description text, default_price_cents integer,
-item_type text, is_active boolean, sort_order integer, created_at timestamptz
-
--- canned_job_items (optional: for bundles shown as one customer line)
-id uuid, canned_job_id uuid, description text, item_type text,
-cost_cents integer, default_price_cents integer, sort_order integer
-```
-
-**Design notes:**
-- Initially, each canned job can be a single flat-price line item (simplest to build).
-- Later, canned jobs can expand to multi-item bundles where staff see line details but customer sees one summarized line.
-- Canned jobs are shop-global, not per-customer.
-- The existing `estimate_items` table is not changed — canned jobs just pre-fill the add-item form.
+**Files changed:**
+- `supabase/migrations/010_canned_jobs.sql` (new)
+- `src/lib/portalData.js` — 9 new helpers: `listCannedJobs`, `getCannedJob`, `createCannedJob`, `updateCannedJob`, `softHideCannedJob`, `listCannedJobItems`, `createCannedJobItem`, `updateCannedJobItem`, `addCannedJobToEstimate`
+- `src/pages/portal/PortalEstimates.jsx` — new state, handlers, preset picker modal, manage canned jobs modal
+- `src/styles/portal.css` — new canned jobs CSS section
 
 ---
 
@@ -642,6 +633,26 @@ cost_cents integer, default_price_cents integer, sort_order integer
 
 ---
 
+### Phase 14A Acceptance Criteria (Planning — not yet implemented)
+
+**Detail view modals:**
+- [ ] RO, estimate, and invoice detail panels open as centered modal overlays instead of inline tiles below the list.
+- [ ] All existing actions work inside the modals: edit fields, change status, start inspection, create/view estimate, send approval, create Helcim invoice.
+- [ ] Deep-link support is preserved where practical. No data is lost when a modal is closed.
+
+**Modal sizing (owner-requested):**
+- [ ] Large management and detail modals use more of the available screen width and height — content should feel comfortable on a desktop browser without excessive scrolling.
+- [ ] The Manage Preset Jobs modal (Phase 13E) is enlarged so job details and line items can be viewed and edited without cramped spacing.
+- [ ] Scrolling is internal to the modal content area only — the page behind the modal does not scroll.
+- [ ] Modals are responsive: on smaller screens they expand to fill the viewport and allow internal scroll.
+
+**Shared constraints:**
+- [ ] Public website is completely unaffected.
+- [ ] No new security regressions: all modal content is behind `ProtectedRoute`.
+- [ ] No internal cost, markup, or secrets appear in any customer-facing view.
+
+---
+
 ## Phase Completion Checklist
 
 | Phase | Feature | Status |
@@ -666,8 +677,9 @@ cost_cents integer, default_price_cents integer, sort_order integer
 | 13B | Repair order intake: inline new customer + inline new vehicle + multiple concerns | ✅ Complete |
 | 13C | Customer and vehicle service history view (read-only consolidated history per customer/vehicle) | ✅ Complete |
 | 13D | Estimate line item internal cost, markup %, and customer price fields | ✅ Complete |
-| 13E+ | Remaining Phase 13 workflow improvements (canned/preset jobs, horizontal estimate totals bar) | ⬜ Not started |
-| 14A | Detail view modals — RO, estimate, and invoice details open as centered modals instead of inline panels | ⬜ Not started |
+| 13E | Canned jobs / preset job bundles — Add Preset Job button in estimate builder, preset picker modal, Manage Canned Jobs panel | ✅ Complete |
+| 13F | Horizontal estimate totals bar — full-width navy bar replacing the vertical totals box | ✅ Complete |
+| 14A | Detail view modals + modal sizing — RO, estimate, and invoice details as centered modals; large management modals use more screen width/height | ⬜ Not started |
 | 14B | Printable customer invoice — Print button + professional letter-print layout (no internal cost/markup) | ⬜ Not started |
 | 14C | Printable internal RO — mechanic worksheet auto-filled from RO concerns, vehicle, customer | ⬜ Not started |
 | 14D | RO concerns → estimate job groups — concerns auto-populate as grouped sections in the estimate builder | ⬜ Not started |
