@@ -125,14 +125,14 @@ Automatically mark a repair order as paid when Helcim confirms a successful paym
 
 ### Webhook Setup
 1. In the Helcim dashboard: Settings → Webhooks → Add endpoint
-2. Point to: `https://powerautomotive.ca/.netlify/functions/helcim-webhook`
+2. Point to: `https://powerautomotive.ca/.netlify/functions/payment-event-sync`
 3. Subscribe to: `invoice.paid`, `invoice.partial_payment`, `invoice.voided`
 4. Helcim provides a **webhook secret** for signature verification
 
-### Netlify Function: `helcim-webhook.js`
+### Netlify Function: `payment-event-sync.js`
 
 ```
-POST /.netlify/functions/helcim-webhook
+POST /.netlify/functions/payment-event-sync
 
 1. Receive POST body from Helcim
 2. Verify HMAC-SHA256 signature using HELCIM_WEBHOOK_SECRET
@@ -259,26 +259,54 @@ HELCIM_API_BASE_URL=https://api.helcim.com/v2
 
 ---
 
-### Phase 9D — Helcim Webhook Payment Sync
+### Phase 9D — Helcim Webhook Payment Sync (complete)
 
 **Goal:** Payment status updates automatically when Helcim confirms a transaction, without staff having to manually update the portal.
 
-**Netlify Function:** `netlify/functions/helcim-webhook.js`
+**Netlify Function:** `netlify/functions/payment-event-sync.js`
+
+**Endpoint:** `/.netlify/functions/payment-event-sync`
 
 **Environment variables required:**
 ```
-HELCIM_WEBHOOK_SECRET=your_helcim_webhook_secret
+HELCIM_WEBHOOK_VERIFIER_TOKEN=your_helcim_webhook_verifier_token
+HELCIM_API_TOKEN=your_helcim_api_token   (for fetching transaction details)
+SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 ```
 
-**Webhook events to handle:**
-- `invoice.paid`
-- `invoice.partial_payment`
-- `invoice.voided`
-- `invoice.viewed` (optional, for tracking customer engagement)
+**⚠️ Important — Webhook Delivery URL:**
+- The delivery URL must be HTTPS.
+- Helcim may reject delivery URLs that contain the word "helcim".
+  If rejected, use Netlify redirect rules to expose the function under a neutral path
+  such as `/.netlify/functions/payment-event-sync` (rename the file accordingly).
+- For local testing, you must use a tunneling tool such as ngrok or Cloudflare Tunnel —
+  Helcim cannot deliver to `localhost`. A deployed Netlify preview URL also works.
+
+**Helcim dashboard setup:**
+1. Log in to Helcim → All Tools → Integrations → Webhooks
+2. Add a new webhook endpoint
+3. Set Delivery URL to: `https://powerautomotive.ca/.netlify/functions/payment-event-sync`
+4. Copy the **Verifier Token** shown after creation
+5. Add it to Netlify environment variables as `HELCIM_WEBHOOK_VERIFIER_TOKEN`
+6. Select events to subscribe to (at minimum): `cardTransaction`
+
+**Signature verification:**
+- Helcim uses Svix for webhook delivery
+- Signed content: `{webhook-id}.{webhook-timestamp}.{rawBody}`
+- Key: base64-decoded `HELCIM_WEBHOOK_VERIFIER_TOKEN`
+- Algorithm: HMAC-SHA256, result encoded as base64
+- Compared against `webhook-signature` header using timing-safe comparison
+- Returns 401 if verification fails
+
+**Webhook event types handled:**
+- `cardTransaction` — payment attempt; transaction details fetched via Helcim API
+- `terminalCancel` — cancellation recorded but does not mark invoice paid
+- Unknown types — recorded in `helcim_payment_events` and 200 returned safely
 
 **Workflow:**
 1. Customer pays via the Helcim payment link.
-2. Helcim sends a POST to `/.netlify/functions/helcim-webhook`.
+2. Helcim sends a POST to `/.netlify/functions/payment-event-sync`.
 3. Function verifies the HMAC-SHA256 signature using `HELCIM_WEBHOOK_SECRET`.
    - If invalid: return 401, do not process.
 4. Function matches the event to a `helcim_invoices` row via `helcim_invoice_id`.
@@ -300,5 +328,5 @@ HELCIM_WEBHOOK_SECRET=your_helcim_webhook_secret
 | Variable | Used In | Notes |
 |---|---|---|
 | `HELCIM_API_TOKEN` | Netlify Functions only (`helcim-create-invoice.js`) | Never in `src/`. Set in Netlify env vars. |
-| `HELCIM_WEBHOOK_SECRET` | Netlify Functions only (`helcim-webhook.js`) | Used to verify HMAC signatures. Never in `src/`. |
+| `HELCIM_WEBHOOK_VERIFIER_TOKEN` | Netlify Functions only (`payment-event-sync.js`) | Used to verify Svix/Helcim HMAC signatures. Never in `src/`. |
 | `HELCIM_API_BASE_URL` | Netlify Functions only | Defaults to `https://api.helcim.com/v2`. Set explicitly for sandbox testing. |
