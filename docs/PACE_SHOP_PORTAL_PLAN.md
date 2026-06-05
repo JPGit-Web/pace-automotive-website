@@ -192,11 +192,15 @@ These are larger than the Phase 13 incremental edits. They touch portal detail U
 - Reporting and analytics dashboard
 - Mobile app
 
-**Pricing markup polish (future phase — do not implement until owner confirms):**
-Currently `estimate_items.markup_percent` supports percentage-based markup only (e.g. cost $50 + 25% = $62.50). A future phase should add support for **fixed dollar markup** as an alternative:
-- Markup type: `percent` or `dollar`
-- Dollar markup: cost $50 + $20 = $70
-This would require a new `markup_type` column on `estimate_items` and `canned_job_items` (migration), updates to the `ItemForm` component (toggle or dropdown), auto-calculation logic changes in `portalData.js`, and no impact on customer-facing output (markup is always staff-only). **Do not implement until explicitly requested.** Document here so the schema decision (percent vs dollar column) can be made before the migration is written.
+- ✅ **15A — Percentage or Fixed Dollar Markup**
+  - Staff can price line items using either percentage markup or fixed dollar markup.
+  - Percent: `customer_price = cost × (1 + markup_percent / 100)` (e.g. $50 + 25% = $62.50).
+  - Fixed: `customer_price = cost + markup_value_cents` (e.g. $50 + $20 = $70.00).
+  - New columns: `markup_type` (check 'percent'|'fixed') and `markup_value_cents` on both `estimate_items` and `canned_job_items` (migration 012).
+  - UI: Markup Type selector (Percent / Fixed $) replaces the single Markup (%) field; auto-calculation triggers correctly for both modes; customer price can still be manually overridden.
+  - Applies in estimate builder Add/Edit Item modal, Manage Preset Jobs inline forms, and the dedicated Presets page.
+  - `addCannedJobToEstimate` copies `markup_type` and `markup_value_cents` from preset to estimate.
+  - Internal pricing fields only — no change to any customer-facing output, approval email, invoice print, or Helcim invoice creation.
 
 ---
 

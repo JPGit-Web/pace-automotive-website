@@ -46,7 +46,7 @@ export default function PortalSidebar() {
 
       {/* Footer */}
       <div className="portalSidebarFooter">
-        <p className="portalVersionTag">Phase 13A</p>
+        <p className="portalVersionTag">P.A.C.E. Portal</p>
       </div>
     </aside>
   );

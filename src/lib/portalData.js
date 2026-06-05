@@ -1014,6 +1014,7 @@ export async function listEstimateItems(estimateId) {
  * Create a new estimate line item.
  * Accepts unit_price in dollars; converts to cents before storing.
  * Phase 13D: also accepts cost_dollars and markup_percent (staff-only internal pricing).
+ * Phase 15A: also accepts markup_type ('percent'|'fixed') and markup_value_dollars/cents.
  * customer_unit_price_cents mirrors unit_price_cents for the authoritative customer price.
  */
 export async function createEstimateItem(estimateId, repairOrderId, itemData) {
@@ -1021,13 +1022,20 @@ export async function createEstimateItem(estimateId, repairOrderId, itemData) {
   const unitCents = dollarsToCents(itemData.unit_price_dollars ?? itemData.unit_price_cents / 100 ?? 0);
   const lineCents = Math.round(qty * unitCents);
 
-  // Staff-only internal pricing fields (Phase 13D)
+  // Staff-only internal pricing fields (Phase 13D / 15A)
   const costCents = (itemData.cost_dollars != null && itemData.cost_dollars !== "")
     ? dollarsToCents(itemData.cost_dollars)
     : null;
   const markupPct = (itemData.markup_percent != null && itemData.markup_percent !== "")
     ? parseFloat(itemData.markup_percent)
     : null;
+  const markupType = itemData.markup_type ?? "percent";
+  const markupValueCents =
+    markupType === "fixed" && itemData.markup_value_dollars != null && itemData.markup_value_dollars !== ""
+      ? dollarsToCents(itemData.markup_value_dollars)
+      : markupType === "fixed" && itemData.markup_value_cents != null
+      ? itemData.markup_value_cents
+      : null;
 
   const { data, error } = await supabase
     .from("estimate_items")
@@ -1040,7 +1048,9 @@ export async function createEstimateItem(estimateId, repairOrderId, itemData) {
       unit_price_cents:          unitCents,
       customer_unit_price_cents: unitCents,   // mirrors unit_price_cents
       cost_cents:                costCents,
-      markup_percent:            markupPct,
+      markup_type:               markupType,
+      markup_percent:            markupType === "percent" ? markupPct : null,
+      markup_value_cents:        markupValueCents,
       line_total_cents:          lineCents,
       is_required:               itemData.is_required         ?? false,
       is_customer_visible:       itemData.is_customer_visible ?? true,
@@ -1064,10 +1074,11 @@ export async function createEstimateItem(estimateId, repairOrderId, itemData) {
  * Update an estimate line item. Recalculates line_total_cents from qty × unit_price.
  * Accepts unit_price in dollars via unit_price_dollars, or raw cents via unit_price_cents.
  * Phase 13D: also accepts cost_dollars and markup_percent (staff-only internal pricing).
+ * Phase 15A: also accepts markup_type and markup_value_dollars/cents.
  */
 export async function updateEstimateItem(itemId, estimateId, itemData) {
   const ALLOWED = ["item_type","description","quantity","unit_price_cents",
-                   "customer_unit_price_cents","cost_cents","markup_percent",
+                   "customer_unit_price_cents","cost_cents","markup_type","markup_percent","markup_value_cents",
                    "is_required","is_customer_visible","notes","approval_status","sort_order",
                    "estimate_job_id"];
   const payload = {};
@@ -1086,6 +1097,19 @@ export async function updateEstimateItem(itemId, estimateId, itemData) {
     payload.markup_percent = (itemData.markup_percent != null && itemData.markup_percent !== "")
       ? parseFloat(itemData.markup_percent)
       : null;
+  }
+  if ("markup_value_dollars" in itemData) {
+    payload.markup_value_cents = (itemData.markup_value_dollars != null && itemData.markup_value_dollars !== "")
+      ? dollarsToCents(itemData.markup_value_dollars)
+      : null;
+  }
+  // Null out the unused markup column when type is explicitly set
+  if ("markup_type" in itemData) {
+    if (itemData.markup_type === "fixed") {
+      if (!("markup_percent" in payload))      payload.markup_percent     = null;
+    } else {
+      if (!("markup_value_cents" in payload))  payload.markup_value_cents = null;
+    }
   }
 
   // Recalculate line total from customer-facing unit price × qty
@@ -1915,27 +1939,36 @@ export async function listCannedJobItems(cannedJobId) {
 
 /** Create a new item inside a canned job. Returns the created row. */
 export async function createCannedJobItem(cannedJobId, data) {
-  const unitCents = dollarsToCents(data.unit_price_dollars ?? 0);
-  const costCents = (data.cost_dollars != null && data.cost_dollars !== "")
+  const unitCents  = dollarsToCents(data.unit_price_dollars ?? 0);
+  const costCents  = (data.cost_dollars != null && data.cost_dollars !== "")
     ? dollarsToCents(data.cost_dollars) : null;
-  const markupPct = (data.markup_percent != null && data.markup_percent !== "")
+  const markupPct  = (data.markup_percent != null && data.markup_percent !== "")
     ? parseFloat(data.markup_percent) : null;
+  const markupType = data.markup_type ?? "percent";
+  const markupValueCents =
+    markupType === "fixed" && data.markup_value_dollars != null && data.markup_value_dollars !== ""
+      ? dollarsToCents(data.markup_value_dollars)
+      : markupType === "fixed" && data.markup_value_cents != null
+      ? data.markup_value_cents
+      : null;
 
   const { data: created, error } = await supabase
     .from("canned_job_items")
     .insert([{
       canned_job_id:             cannedJobId,
-      item_type:                 data.item_type          ?? "labor",
+      item_type:                 data.item_type           ?? "labor",
       description:               data.description.trim(),
       quantity:                  parseFloat(data.quantity ?? 1),
       cost_cents:                costCents,
-      markup_percent:            markupPct,
+      markup_type:               markupType,
+      markup_percent:            markupType === "percent" ? markupPct : null,
+      markup_value_cents:        markupValueCents,
       unit_price_cents:          unitCents,
       customer_unit_price_cents: Math.max(0, unitCents),
-      is_required:               data.is_required        ?? false,
+      is_required:               data.is_required         ?? false,
       is_customer_visible:       data.is_customer_visible ?? true,
-      notes:                     data.notes?.trim()       || null,
-      sort_order:                data.sort_order          ?? 0,
+      notes:                     data.notes?.trim()        || null,
+      sort_order:                data.sort_order           ?? 0,
     }])
     .select()
     .single();
@@ -1948,7 +1981,7 @@ export async function updateCannedJobItem(id, data) {
   const ALLOWED = [
     "item_type", "description", "quantity",
     "unit_price_cents", "customer_unit_price_cents",
-    "cost_cents", "markup_percent",
+    "cost_cents", "markup_type", "markup_percent", "markup_value_cents",
     "is_required", "is_customer_visible", "notes", "sort_order",
   ];
   const payload = {};
@@ -1967,6 +2000,19 @@ export async function updateCannedJobItem(id, data) {
   }
   if ("markup_percent" in data && !(data.markup_percent == null || data.markup_percent === "")) {
     payload.markup_percent = parseFloat(data.markup_percent);
+  }
+  if ("markup_value_dollars" in data) {
+    payload.markup_value_cents = (data.markup_value_dollars != null && data.markup_value_dollars !== "")
+      ? dollarsToCents(data.markup_value_dollars)
+      : null;
+  }
+  // Null out the unused markup column when type is explicitly set
+  if ("markup_type" in data) {
+    if (data.markup_type === "fixed") {
+      if (!("markup_percent"     in payload)) payload.markup_percent     = null;
+    } else {
+      if (!("markup_value_cents" in payload)) payload.markup_value_cents = null;
+    }
   }
 
   const { data: updated, error } = await supabase
@@ -2000,7 +2046,7 @@ export async function addCannedJobToEstimate(estimateId, repairOrderId, cannedJo
     .limit(1);
   const baseSortOrder = ((existing?.[0]?.sort_order) ?? -1) + 1;
 
-  // Build insert payload (preserves cost/markup, sets customer price = unit_price)
+  // Build insert payload (preserves cost/markup/type, sets customer price = unit_price)
   const rows = items.map((item, idx) => ({
     estimate_id:               estimateId,
     repair_order_id:           repairOrderId,
@@ -2008,7 +2054,9 @@ export async function addCannedJobToEstimate(estimateId, repairOrderId, cannedJo
     description:               item.description,
     quantity:                  item.quantity,
     cost_cents:                item.cost_cents,
+    markup_type:               item.markup_type ?? "percent",
     markup_percent:            item.markup_percent,
+    markup_value_cents:        item.markup_value_cents,
     unit_price_cents:          item.unit_price_cents,
     customer_unit_price_cents: item.customer_unit_price_cents ?? item.unit_price_cents,
     line_total_cents:          Math.round(item.quantity * item.unit_price_cents),

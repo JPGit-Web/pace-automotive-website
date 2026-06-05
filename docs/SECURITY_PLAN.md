@@ -419,3 +419,44 @@ These rules apply when Phase 14 is implemented. Record them here so they are not
 - Only customer-visible notes/titles should appear in the approval email and customer approval page.
 - If `estimate_jobs` is added, update the explicit column allowlists in all four customer-facing functions (`get-approval-estimate.js`, `send-estimate-approval.js`, `submit-estimate-approval.js`, `helcim-create-invoice.js`) before deploying.
 - Helcim invoice creation must continue using only `unit_price_cents` and `line_total_cents` — never cost or markup from any grouping table.
+
+---
+
+## 15. Phase 15A — Percentage or Fixed Dollar Markup Security Notes (Complete)
+
+### New Staff-Only Columns: `markup_type` and `markup_value_cents`
+
+Phase 15A added two new pricing columns to `estimate_items` and `canned_job_items` via migration `012_markup_type.sql`:
+
+| Column | Table(s) | Purpose |
+|---|---|---|
+| `markup_type` | `estimate_items`, `canned_job_items` | `'percent'` or `'fixed'` — selects which formula to apply |
+| `markup_value_cents` | `estimate_items`, `canned_job_items` | Fixed dollar markup amount in cents (used only when `markup_type = 'fixed'`) |
+
+Both columns are **staff-only internal pricing fields**. They must never appear in any customer-facing output, approval email, approval page, or Helcim invoice.
+
+### Updated Staff-Only Field List (estimate_items)
+
+**Columns that are STAFF-ONLY (never customer-facing):**
+- `estimate_items.cost_cents`
+- `estimate_items.markup_type`
+- `estimate_items.markup_percent`
+- `estimate_items.markup_value_cents`
+- `estimate_items.customer_unit_price_cents`
+
+### Customer-Facing Safety Audit (Phase 15A)
+
+The four customer-facing Netlify Functions use explicit column allowlists. The new columns are excluded automatically because they are not named in any allowlist. Audit confirmed zero exposure:
+
+| Function | `markup_type` in select? | `markup_value_cents` in select? | Safe? |
+|---|---|---|---|
+| `get-approval-estimate.js` | No | No | ✅ |
+| `send-estimate-approval.js` | No | No | ✅ |
+| `submit-estimate-approval.js` | No | No | ✅ |
+| `helcim-create-invoice.js` | No | No | ✅ |
+
+`helcim-create-invoice.js` uses only `unit_price_cents` (the authoritative customer-facing price) when building Helcim line items. The markup formula (`cost + markup`) is an internal calculation that produces `unit_price_cents` — Helcim never sees the inputs, only the result.
+
+### Rule
+
+Any future column added to `estimate_items` that is internal/staff-only must be verified absent from all four customer-facing function `select:` lists before deploying. Never use `select: *` in these functions.

@@ -384,18 +384,20 @@ Replaces the single `repair_order.customer_concern` text field with a structured
 Phase 13C (customer/vehicle service history view) reads from existing tables only:
 `repair_orders`, `repair_order_concerns`, `inspections`, `estimates`, `helcim_invoices`, `activity_logs`, `customers`, `vehicles`. No migrations required.
 
-### ✅ Implemented: `estimate_items` pricing columns (Phase 13D — migration 009)
+### ✅ Implemented: `estimate_items` pricing columns (Phase 13D — migration 009; Phase 15A — migration 012)
 
-Three staff-only pricing columns added to `estimate_items`:
+Staff-only pricing columns on `estimate_items`:
 
 | Column | Type | Notes |
 |---|---|---|
 | `cost_cents` | int4 | **STAFF-ONLY.** Internal shop cost per unit in integer cents. Nullable. Check: >= 0. |
-| `markup_percent` | numeric(8,2) | **STAFF-ONLY.** Markup % applied to cost_cents (e.g. 30.00 = 30%). Nullable. Check: >= 0. |
+| `markup_type` | text | **STAFF-ONLY.** `'percent'` or `'fixed'`. Default `'percent'`. Added Phase 15A. |
+| `markup_percent` | numeric(8,2) | **STAFF-ONLY.** Used when `markup_type = 'percent'`. Nullable. Check: >= 0. |
+| `markup_value_cents` | int4 | **STAFF-ONLY.** Fixed dollar markup in cents. Used when `markup_type = 'fixed'`. Nullable. Check: >= 0. Added Phase 15A. |
 | `customer_unit_price_cents` | int4 | Customer-facing unit price in integer cents. Mirrors `unit_price_cents`. Nullable. Check: >= 0. |
 
 **Security rules (enforced in every customer-facing function):**
-- `cost_cents` and `markup_percent` must **never** appear in:
+- `cost_cents`, `markup_type`, `markup_percent`, `markup_value_cents`, and `customer_unit_price_cents` must **never** appear in:
   - `get-approval-estimate.js` select list
   - `send-estimate-approval.js` select list
   - `submit-estimate-approval.js` select list
@@ -405,9 +407,10 @@ Three staff-only pricing columns added to `estimate_items`:
 - `unit_price_cents` remains the authoritative customer-facing price for all totals.
 
 **Calculation logic (frontend, staff portal only):**
-- If staff enters cost + markup → `customer_unit_price_cents = round(cost_cents × (1 + markup_percent / 100))`
+- `markup_type = 'percent'`: `customer_unit_price_cents = round(cost_cents × (1 + markup_percent / 100))`
+- `markup_type = 'fixed'`: `customer_unit_price_cents = cost_cents + markup_value_cents`
 - Customer price can also be set directly (manual override).
-- `line_total_cents = customer_unit_price_cents × quantity`
+- `line_total_cents = unit_price_cents × quantity`
 
 ---
 
@@ -442,7 +445,9 @@ Individual line items within a canned job bundle. When a bundle is added to an e
 | `description` | text | Not null |
 | `quantity` | numeric(10,2) | Default 1 |
 | `cost_cents` | int4 | **STAFF-ONLY.** Nullable. Internal cost. Never sent to customers |
-| `markup_percent` | numeric(8,2) | **STAFF-ONLY.** Nullable. Never sent to customers |
+| `markup_type` | text | **STAFF-ONLY.** `'percent'` or `'fixed'`. Default `'percent'`. Added Phase 15A. |
+| `markup_percent` | numeric(8,2) | **STAFF-ONLY.** Nullable. Used when `markup_type = 'percent'`. Never sent to customers |
+| `markup_value_cents` | int4 | **STAFF-ONLY.** Nullable. Fixed dollar markup in cents. Used when `markup_type = 'fixed'`. Added Phase 15A. |
 | `unit_price_cents` | int4 | Customer-facing unit price. Copied to `estimate_items.unit_price_cents` |
 | `customer_unit_price_cents` | int4 | Nullable. Mirrors `unit_price_cents` for future override support |
 | `is_required` | boolean | Default false |
@@ -454,7 +459,7 @@ Individual line items within a canned job bundle. When a bundle is added to an e
 
 **RLS:** Authenticated staff only. No anon access. No DELETE policy.
 
-**Security note:** `cost_cents` and `markup_percent` are staff-only. They are copied into `estimate_items` when a bundle is applied, but those columns on `estimate_items` are also staff-only and are already excluded from all four customer-facing Netlify Functions by explicit column allowlists (see SECURITY_PLAN.md §12).
+**Security note:** `cost_cents`, `markup_type`, `markup_percent`, and `markup_value_cents` are staff-only. They are copied into `estimate_items` when a bundle is applied, but those columns on `estimate_items` are also staff-only and are already excluded from all four customer-facing Netlify Functions by explicit column allowlists (see SECURITY_PLAN.md §12).
 
 ---
 

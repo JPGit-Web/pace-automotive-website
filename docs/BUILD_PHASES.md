@@ -820,33 +820,40 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 | 14C | Printable internal RO — mechanic worksheet auto-filled from RO concerns, vehicle, customer | ✅ Complete |
 | 14D | RO concerns → estimate job groups — concerns auto-populate as grouped sections in the estimate builder | ✅ Complete |
 | 14E | Dedicated Presets page + improved job group removal (items ungroup in DB, not just UI) | ✅ Complete |
+| 15A | Percent or fixed dollar markup on estimate items and preset items | ✅ Complete |
+
+---
+
+### Phase 15A — Pricing Markup Options: Percentage or Fixed Dollar
+
+**Implemented:**
+- `supabase/migrations/012_markup_type.sql` — adds `markup_type text not null default 'percent'` (check: 'percent' or 'fixed') and `markup_value_cents int4 null check >= 0` to both `estimate_items` and `canned_job_items`. Comments mark both as staff-only. Existing rows default to `markup_type = 'percent'` — no behavior change.
+- `src/lib/portalData.js` — `createEstimateItem` and `createCannedJobItem` accept `markup_type` and `markup_value_dollars`/`markup_value_cents`; store `markup_type` and `markup_value_cents`, null out the unused markup column. `updateEstimateItem` and `updateCannedJobItem`: added `markup_type` and `markup_value_cents` to ALLOWED lists; accept `markup_value_dollars`; null out unused column when type is set. `addCannedJobToEstimate`: copies `markup_type` and `markup_value_cents` from canned item to estimate item.
+- `src/pages/portal/PortalEstimates.jsx` — `EMPTY_ITEM_FORM` adds `markup_type: "percent"` and `markup_value_dollars: ""`; `validateItemForm` validates both modes; `handleItemField` auto-calculates customer price for both percent (`cost × (1 + pct/100)`) and fixed (`cost + fixed`) modes; `openEditModal` loads `markup_type` and `markup_value_dollars` from saved item; `ItemForm` component pricing section: replaces single "Markup (%)" field with a Markup Type selector (Percent / Fixed $) + context-sensitive Markup Value input; inline cost hint updated to show fixed vs percent marker. Same changes applied to manage canned jobs inline item forms (`openEditJobItem`, `handleManageItemField`, edit/add pricing rows).
+- `src/pages/portal/PortalPresets.jsx` — same pricing controls update: `EMPTY_ITEM_FORM`, `validateItemForm`, `openEditItem`, `handleItemField`, `ItemForm` component, and item row cost hint.
+- `src/components/portal/PortalSidebar.jsx` — footer label updated from "Phase 13A" to "P.A.C.E. Portal".
+
+**Security:**
+- `markup_type` and `markup_value_cents` are internal-only pricing fields. They are NOT selected in `get-approval-estimate.js`, `send-estimate-approval.js`, `submit-estimate-approval.js`, or `helcim-create-invoice.js` (all use explicit column allowlists that predate and do not include these columns). No changes to any customer-facing Netlify Function required.
+- `ApprovalPage.jsx` reads only from `get-approval-estimate.js` — no internal pricing exposed.
+- `InvoicePrintView.jsx` uses only `unit_price_cents` and `line_total_cents` — no internal pricing exposed.
+- Helcim invoice creation uses `unit_price_cents` (the final customer-facing price) — unaffected.
+- No `.delete()` calls. No hard deletes.
+
+**Acceptance criteria:**
+- [x] Cost $50 + Percent 25% → Customer Price $62.50 (auto-calculated).
+- [x] Cost $50 + Fixed $20 → Customer Price $70.00 (auto-calculated).
+- [x] Customer price can be manually overridden in both modes.
+- [x] Switching markup type resets auto-calc to the new mode's formula.
+- [x] Existing items (markup_type defaults to 'percent') load and save correctly.
+- [x] Preset items support both markup modes; copying a preset to an estimate preserves markup_type and markup_value_cents.
+- [x] Cost hint in item table shows "+$X.XX fixed" or "+X%" appropriately.
+- [x] No internal pricing fields in any customer-facing output.
+- [x] Build passes.
 
 ---
 
 ## Backlog / Future Phases (Not Yet Scheduled)
-
-### Pricing Markup Polish — Fixed Dollar Markup
-
-**Status:** Deferred. Do not implement until owner confirms.
-
-Currently `estimate_items.markup_percent` supports percentage-based markup only (e.g. cost $50 + 25% → $62.50). Owner has requested that a future phase support **fixed dollar markup** as an alternative:
-
-| Markup type | Example | Result |
-|---|---|---|
-| Percent (current) | Cost $50 + 25% | Customer price $62.50 |
-| Dollar (future) | Cost $50 + $20 | Customer price $70.00 |
-
-**What would be needed:**
-- New `markup_type text not null default 'percent'` column on `estimate_items` and `canned_job_items` (new migration)
-- `ItemForm` component: toggle/dropdown for markup type; auto-calc shows correct formula
-- `portalData.js`: `createEstimateItem`, `updateEstimateItem`, `updateCannedJobItem` accept `markup_type`
-- `ItemForm` in `PortalEstimates.jsx`: update auto-calculate logic for dollar mode
-- No change to customer-facing output — `cost_cents`, `markup_percent`, `markup_type` are staff-only in all paths
-- Migration is safe to re-run (`alter table ... add column if not exists`)
-
-**Security note:** `markup_type` must be excluded from `get-approval-estimate.js` and all customer-facing Netlify Functions, the same as `cost_cents` and `markup_percent`.
-
----
 
 ## Phase 9D Live Testing Checklist
 Phase 9D is built and configured. Live verification requires an in-person Helcim terminal payment. Before signing off Phase 9D as fully tested:

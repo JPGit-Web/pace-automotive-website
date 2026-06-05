@@ -46,15 +46,17 @@ const ITEM_APPROVAL_LABELS = {
 };
 
 const EMPTY_ITEM_FORM = {
-  item_type:           "labor",
-  description:         "",
-  quantity:            "1",
-  cost_dollars:        "",
-  markup_percent:      "",
-  unit_price_dollars:  "0.00",
-  is_required:         false,
-  is_customer_visible: true,
-  notes:               "",
+  item_type:             "labor",
+  description:           "",
+  quantity:              "1",
+  cost_dollars:          "",
+  markup_type:           "percent",
+  markup_percent:        "",
+  markup_value_dollars:  "",
+  unit_price_dollars:    "0.00",
+  is_required:           false,
+  is_customer_visible:   true,
+  notes:                 "",
 };
 
 /* ── Helpers ─────────────────────────────────────────────────── */
@@ -79,7 +81,10 @@ function validateItemForm(d) {
   if (parseFloat(d.quantity) < 0) e.quantity = "Quantity must be 0 or greater.";
   if (parseFloat(d.unit_price_dollars) < 0) e.unit_price_dollars = "Price must be 0 or greater.";
   if (d.cost_dollars !== "" && parseFloat(d.cost_dollars) < 0) e.cost_dollars = "Cost must be 0 or greater.";
-  if (d.markup_percent !== "" && parseFloat(d.markup_percent) < 0) e.markup_percent = "Markup must be 0 or greater.";
+  if (d.markup_type !== "fixed" && d.markup_percent !== "" && parseFloat(d.markup_percent) < 0)
+    e.markup_percent = "Markup must be 0 or greater.";
+  if (d.markup_type === "fixed" && d.markup_value_dollars !== "" && parseFloat(d.markup_value_dollars) < 0)
+    e.markup_value_dollars = "Markup must be 0 or greater.";
   return e;
 }
 
@@ -122,7 +127,10 @@ function ItemTable({ items, onEdit, onHide, disabled }) {
                 {item.cost_cents != null && (
                   <div className="portalItemCostHint">
                     Cost: {fmtCents(item.cost_cents)}
-                    {item.markup_percent != null && ` · +${item.markup_percent}%`}
+                    {item.markup_type === "fixed" && item.markup_value_cents != null
+                      ? ` · +${fmtCents(item.markup_value_cents)} fixed`
+                      : item.markup_percent != null ? ` · +${item.markup_percent}%`
+                      : ""}
                   </div>
                 )}
                 {item.notes && (
@@ -168,8 +176,11 @@ function ItemForm({ formData, formErrors, onChange, saving, onSubmit, onClose, t
     Math.round((parseFloat(formData.unit_price_dollars) || 0) * 100)
   );
 
-  const hasCost   = formData.cost_dollars !== "" && !isNaN(parseFloat(formData.cost_dollars));
-  const hasMarkup = formData.markup_percent !== "" && !isNaN(parseFloat(formData.markup_percent));
+  const hasCost      = formData.cost_dollars !== "" && !isNaN(parseFloat(formData.cost_dollars));
+  const isFixedMode  = formData.markup_type === "fixed";
+  const hasMarkup    = isFixedMode
+    ? (formData.markup_value_dollars !== "" && !isNaN(parseFloat(formData.markup_value_dollars)))
+    : (formData.markup_percent       !== "" && !isNaN(parseFloat(formData.markup_percent)));
 
   return (
     <div className="portalModalOverlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -223,19 +234,34 @@ function ItemForm({ formData, formErrors, onChange, saving, onSubmit, onClose, t
                       placeholder="0.00" />
                     {formErrors.cost_dollars && <p className="portalFormFieldError">{formErrors.cost_dollars}</p>}
                   </div>
+                  <div className="portalFormField" style={{ flex:"0 0 110px" }}>
+                    <label className="portalFormLabel">Markup Type</label>
+                    <select className="portalFormSelect" name="markup_type" value={formData.markup_type} onChange={onChange}>
+                      <option value="percent">Percent</option>
+                      <option value="fixed">Fixed $</option>
+                    </select>
+                  </div>
                   <div className="portalFormField">
-                    <label className="portalFormLabel">Markup (%)</label>
-                    <input className={`portalFormInput${formErrors.markup_percent ? " invalid" : ""}`}
-                      name="markup_percent" type="number" min="0" step="0.1"
-                      value={formData.markup_percent} onChange={onChange}
-                      placeholder="0" />
-                    {formErrors.markup_percent && <p className="portalFormFieldError">{formErrors.markup_percent}</p>}
+                    <label className="portalFormLabel">{isFixedMode ? "Markup ($)" : "Markup (%)"}</label>
+                    {isFixedMode ? (
+                      <input className={`portalFormInput${formErrors.markup_value_dollars ? " invalid" : ""}`}
+                        name="markup_value_dollars" type="number" min="0" step="0.01"
+                        value={formData.markup_value_dollars} onChange={onChange}
+                        placeholder="0.00" />
+                    ) : (
+                      <input className={`portalFormInput${formErrors.markup_percent ? " invalid" : ""}`}
+                        name="markup_percent" type="number" min="0" step="0.1"
+                        value={formData.markup_percent} onChange={onChange}
+                        placeholder="0" />
+                    )}
+                    {isFixedMode  && formErrors.markup_value_dollars && <p className="portalFormFieldError">{formErrors.markup_value_dollars}</p>}
+                    {!isFixedMode && formErrors.markup_percent        && <p className="portalFormFieldError">{formErrors.markup_percent}</p>}
                   </div>
                 </div>
                 {hasCost && hasMarkup && (
                   <p style={{ margin:"0 0 4px", fontSize:".72rem", color:"var(--p-text-3)" }}>
                     <i className="fa-solid fa-calculator" style={{ marginRight:4 }}></i>
-                    Auto-calculated from cost × (1 + markup%)
+                    {isFixedMode ? "Auto-calculated from cost + fixed markup" : "Auto-calculated from cost × (1 + markup%)"}
                   </p>
                 )}
               </div>
@@ -548,11 +574,15 @@ export default function PortalEstimates() {
     setItemForm((p) => {
       const updated = { ...p, [name]: newVal };
       // Auto-calculate customer price when cost or markup changes
-      if (name === "cost_dollars" || name === "markup_percent") {
-        const cost   = parseFloat(name === "cost_dollars"   ? newVal : updated.cost_dollars);
-        const markup = parseFloat(name === "markup_percent" ? newVal : updated.markup_percent);
-        if (!isNaN(cost) && cost >= 0 && !isNaN(markup) && markup >= 0) {
-          updated.unit_price_dollars = (cost * (1 + markup / 100)).toFixed(2);
+      const cost   = parseFloat(name === "cost_dollars"         ? newVal : updated.cost_dollars);
+      const pct    = parseFloat(name === "markup_percent"       ? newVal : updated.markup_percent);
+      const fixed  = parseFloat(name === "markup_value_dollars" ? newVal : updated.markup_value_dollars);
+      const mtype  = name === "markup_type" ? newVal : updated.markup_type;
+      if (!isNaN(cost) && cost >= 0) {
+        if (mtype === "fixed" && !isNaN(fixed) && fixed >= 0) {
+          updated.unit_price_dollars = (cost + fixed).toFixed(2);
+        } else if (mtype !== "fixed" && !isNaN(pct) && pct >= 0) {
+          updated.unit_price_dollars = (cost * (1 + pct / 100)).toFixed(2);
         }
       }
       return updated;
@@ -572,15 +602,17 @@ export default function PortalEstimates() {
   /* ── Open edit modal ── */
   function openEditModal(item) {
     setItemForm({
-      item_type:           item.item_type,
-      description:         item.description,
-      quantity:            item.quantity?.toString() ?? "1",
-      cost_dollars:        item.cost_cents != null ? (item.cost_cents / 100).toFixed(2) : "",
-      markup_percent:      item.markup_percent != null ? String(item.markup_percent) : "",
-      unit_price_dollars:  ((item.unit_price_cents ?? 0) / 100).toFixed(2),
-      is_required:         item.is_required ?? false,
-      is_customer_visible: item.is_customer_visible ?? true,
-      notes:               item.notes ?? "",
+      item_type:             item.item_type,
+      description:           item.description,
+      quantity:              item.quantity?.toString() ?? "1",
+      cost_dollars:          item.cost_cents != null ? (item.cost_cents / 100).toFixed(2) : "",
+      markup_type:           item.markup_type ?? "percent",
+      markup_percent:        item.markup_percent != null ? String(item.markup_percent) : "",
+      markup_value_dollars:  item.markup_value_cents != null ? (item.markup_value_cents / 100).toFixed(2) : "",
+      unit_price_dollars:    ((item.unit_price_cents ?? 0) / 100).toFixed(2),
+      is_required:           item.is_required ?? false,
+      is_customer_visible:   item.is_customer_visible ?? true,
+      notes:                 item.notes ?? "",
     });
     setItemFormErrors({});
     setItemSaveError("");
@@ -831,16 +863,18 @@ export default function PortalEstimates() {
     setEditingJobItem(item);
     setAddItemToJobMode(false);
     setManageItemForm({
-      item_type:           item.item_type,
-      description:         item.description,
-      quantity:            String(item.quantity),
-      cost_dollars:        item.cost_cents != null ? (item.cost_cents / 100).toFixed(2) : "",
-      markup_percent:      item.markup_percent != null ? String(item.markup_percent) : "",
-      unit_price_dollars:  ((item.unit_price_cents ?? 0) / 100).toFixed(2),
-      is_required:         item.is_required   ?? false,
-      is_customer_visible: item.is_customer_visible ?? true,
-      notes:               item.notes ?? "",
-      sort_order:          String(item.sort_order ?? 0),
+      item_type:             item.item_type,
+      description:           item.description,
+      quantity:              String(item.quantity),
+      cost_dollars:          item.cost_cents != null ? (item.cost_cents / 100).toFixed(2) : "",
+      markup_type:           item.markup_type ?? "percent",
+      markup_percent:        item.markup_percent != null ? String(item.markup_percent) : "",
+      markup_value_dollars:  item.markup_value_cents != null ? (item.markup_value_cents / 100).toFixed(2) : "",
+      unit_price_dollars:    ((item.unit_price_cents ?? 0) / 100).toFixed(2),
+      is_required:           item.is_required        ?? false,
+      is_customer_visible:   item.is_customer_visible ?? true,
+      notes:                 item.notes ?? "",
+      sort_order:            String(item.sort_order ?? 0),
     });
     setManageItemErrors({});
   }
@@ -850,11 +884,15 @@ export default function PortalEstimates() {
     const newVal = type === "checkbox" ? checked : value;
     setManageItemForm((p) => {
       const updated = { ...p, [name]: newVal };
-      if (name === "cost_dollars" || name === "markup_percent") {
-        const cost   = parseFloat(name === "cost_dollars"   ? newVal : updated.cost_dollars);
-        const markup = parseFloat(name === "markup_percent" ? newVal : updated.markup_percent);
-        if (!isNaN(cost) && cost >= 0 && !isNaN(markup) && markup >= 0) {
-          updated.unit_price_dollars = (cost * (1 + markup / 100)).toFixed(2);
+      const cost   = parseFloat(name === "cost_dollars"         ? newVal : updated.cost_dollars);
+      const pct    = parseFloat(name === "markup_percent"       ? newVal : updated.markup_percent);
+      const fixed  = parseFloat(name === "markup_value_dollars" ? newVal : updated.markup_value_dollars);
+      const mtype  = name === "markup_type" ? newVal : updated.markup_type;
+      if (!isNaN(cost) && cost >= 0) {
+        if (mtype === "fixed" && !isNaN(fixed) && fixed >= 0) {
+          updated.unit_price_dollars = (cost + fixed).toFixed(2);
+        } else if (mtype !== "fixed" && !isNaN(pct) && pct >= 0) {
+          updated.unit_price_dollars = (cost * (1 + pct / 100)).toFixed(2);
         }
       }
       return updated;
@@ -1490,10 +1528,22 @@ export default function PortalEstimates() {
                                           <input className="portalFormInput" name="cost_dollars" type="number" min="0" step="0.01"
                                             value={manageItemForm.cost_dollars} onChange={handleManageItemField} placeholder="0.00" />
                                         </div>
+                                        <div className="portalFormField" style={{ flex:"0 0 100px" }}>
+                                          <label className="portalFormLabel">Type</label>
+                                          <select className="portalFormSelect" name="markup_type" value={manageItemForm.markup_type} onChange={handleManageItemField}>
+                                            <option value="percent">Percent</option>
+                                            <option value="fixed">Fixed $</option>
+                                          </select>
+                                        </div>
                                         <div className="portalFormField">
-                                          <label className="portalFormLabel">Markup (%)</label>
-                                          <input className="portalFormInput" name="markup_percent" type="number" min="0" step="0.1"
-                                            value={manageItemForm.markup_percent} onChange={handleManageItemField} placeholder="0" />
+                                          <label className="portalFormLabel">{manageItemForm.markup_type === "fixed" ? "Markup ($)" : "Markup (%)"}</label>
+                                          {manageItemForm.markup_type === "fixed" ? (
+                                            <input className="portalFormInput" name="markup_value_dollars" type="number" min="0" step="0.01"
+                                              value={manageItemForm.markup_value_dollars} onChange={handleManageItemField} placeholder="0.00" />
+                                          ) : (
+                                            <input className="portalFormInput" name="markup_percent" type="number" min="0" step="0.1"
+                                              value={manageItemForm.markup_percent} onChange={handleManageItemField} placeholder="0" />
+                                          )}
                                         </div>
                                         <div className="portalFormField">
                                           <label className="portalFormLabel">Customer Price ($)</label>
@@ -1518,7 +1568,13 @@ export default function PortalEstimates() {
                                   <span style={{ color:"var(--p-text-3)", fontSize:".78rem" }}>×{item.quantity}</span>
                                   <span style={{ fontFamily:"monospace", fontSize:".85rem", color:"var(--p-navy)", fontWeight:700 }}>{fmtCents(item.unit_price_cents)}</span>
                                   {item.cost_cents != null && (
-                                    <span className="portalItemCostHint" style={{ margin:0 }}>Cost: {fmtCents(item.cost_cents)}{item.markup_percent != null ? ` +${item.markup_percent}%` : ""}</span>
+                                    <span className="portalItemCostHint" style={{ margin:0 }}>
+                                      Cost: {fmtCents(item.cost_cents)}
+                                      {item.markup_type === "fixed" && item.markup_value_cents != null
+                                        ? ` +${fmtCents(item.markup_value_cents)} fixed`
+                                        : item.markup_percent != null ? ` +${item.markup_percent}%`
+                                        : ""}
+                                    </span>
                                   )}
                                   <button className="portalBtnIcon" onClick={() => openEditJobItem(item)} title="Edit" disabled={editingJobItem || addItemToJobMode}>
                                     <i className="fa-solid fa-pen"></i>
@@ -1559,10 +1615,22 @@ export default function PortalEstimates() {
                                         <input className="portalFormInput" name="cost_dollars" type="number" min="0" step="0.01"
                                           value={manageItemForm.cost_dollars} onChange={handleManageItemField} placeholder="0.00" />
                                       </div>
+                                      <div className="portalFormField" style={{ flex:"0 0 100px" }}>
+                                        <label className="portalFormLabel">Type</label>
+                                        <select className="portalFormSelect" name="markup_type" value={manageItemForm.markup_type} onChange={handleManageItemField}>
+                                          <option value="percent">Percent</option>
+                                          <option value="fixed">Fixed $</option>
+                                        </select>
+                                      </div>
                                       <div className="portalFormField">
-                                        <label className="portalFormLabel">Markup (%)</label>
-                                        <input className="portalFormInput" name="markup_percent" type="number" min="0" step="0.1"
-                                          value={manageItemForm.markup_percent} onChange={handleManageItemField} placeholder="0" />
+                                        <label className="portalFormLabel">{manageItemForm.markup_type === "fixed" ? "Markup ($)" : "Markup (%)"}</label>
+                                        {manageItemForm.markup_type === "fixed" ? (
+                                          <input className="portalFormInput" name="markup_value_dollars" type="number" min="0" step="0.01"
+                                            value={manageItemForm.markup_value_dollars} onChange={handleManageItemField} placeholder="0.00" />
+                                        ) : (
+                                          <input className="portalFormInput" name="markup_percent" type="number" min="0" step="0.1"
+                                            value={manageItemForm.markup_percent} onChange={handleManageItemField} placeholder="0" />
+                                        )}
                                       </div>
                                       <div className="portalFormField">
                                         <label className="portalFormLabel">Customer Price ($)</label>
