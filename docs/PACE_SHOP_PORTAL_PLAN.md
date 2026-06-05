@@ -205,8 +205,14 @@ These are larger than the Phase 13 incremental edits. They touch portal detail U
 - ✅ **15B — Sidebar / Portal UX Cleanup**
   - Presets moved out of the main menu; now lives in a "Setup" section at the bottom of the sidebar.
   - Active-state highlighting works on the bottom Presets link (same `portalNavLink.active` class as main menu).
-  - Stale phase text ("Phase 13A") removed. Footer shows "P.A.C.E. Portal" version tag below the Presets link.
+  - Stale phase text removed. Footer shows "P.A.C.E. Portal" version tag below the Presets link.
   - No route, schema, or pricing changes.
+
+- ✅ **15C — Owner-Ready Cleanup / QA**
+  - Removed the only production-facing phase label: "Phase 9D" span on the Invoices Sync button; updated tooltip to reflect that webhook auto-sync is active.
+  - Full security audit: no secrets in `src/`, no Supabase `.delete()` calls, all four customer-facing Netlify functions confirmed to exclude internal pricing fields via explicit column allowlists.
+  - `docs/TEST_DATA_CLEANUP.sql` — manual SQL script for Supabase Dashboard to soft-delete test customers and all linked records (in dependency order), with SELECT preview queries and safety ROLLBACK.
+  - `docs/OWNER_DEMO_CHECKLIST.md` — 14-section end-to-end QA checklist covering auth, all portal pages, estimate pricing modes, customer approval safety, invoice print, Presets page, and security verification.
 
 **Phase 16A — Appointment Calendar (Planned, not yet scheduled):**
 - Full calendar view for appointments with day/week grid, drag-to-reschedule, and status colour coding.

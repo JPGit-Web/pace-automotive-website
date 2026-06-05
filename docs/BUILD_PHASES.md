@@ -822,6 +822,7 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 | 14E | Dedicated Presets page + improved job group removal (items ungroup in DB, not just UI) | ✅ Complete |
 | 15A | Percent or fixed dollar markup on estimate items and preset items | ✅ Complete |
 | 15B | Sidebar / portal UX cleanup — move Presets to footer Setup section | ✅ Complete |
+| 15C | Owner-ready cleanup / QA — stale label removal, test data cleanup SQL, owner demo checklist, security audit | ✅ Complete |
 
 ---
 
@@ -876,6 +877,48 @@ Setup (section label) → Presets (NavLink, active-highlighted) → P.A.C.E. Por
 - [x] No stale phase numbers visible in portal UI.
 - [x] Presets page still loads; preset CRUD still works.
 - [x] Estimate builder "Add Preset Job" and "Manage Presets →" link still work.
+- [x] Build passes.
+
+---
+
+### Phase 15C — Owner-Ready Cleanup / QA
+
+**Implemented:**
+
+**Part A — UI cleanup:**
+- `src/pages/portal/PortalInvoices.jsx` — Removed production-facing "Phase 9D" span text from the disabled Sync button. Updated button tooltip from "coming in Phase 9D" to "Payment status syncs automatically via Helcim webhook". This was the only phase label rendered in the portal UI.
+- All other phase references are developer code comments only (portalData.js section headers, portal.css section comments) — these are internal developer annotations, not visible in the portal UI, and are left unchanged.
+
+**Part B — Empty/loading/error states:**
+- All portal pages confirmed to have proper empty, loading, and error states:
+  - Vehicles, Repair Orders, Customers, Appointments, Inspections, Estimates, Invoices, Presets — all have `portalEmptyState` blocks with friendly text, icons, and retry buttons where applicable.
+  - No rough or broken-looking states found. No changes needed.
+
+**Part C — Test data cleanup:**
+- `docs/TEST_DATA_CLEANUP.sql` — new file. Manual-use-only SQL script for Supabase Dashboard. Contains SELECT preview queries followed by commented-out soft-delete/UPDATE statements in safe dependency order: estimate_items → estimate_jobs → approval_tokens → estimates → inspection_items → inspections → repair_order_concerns → repair_orders → vehicles → customers. Hard-delete for appointment_requests (which has no is_active column). Targets customers with test-looking names/emails. COMMIT is commented out; ROLLBACK is active until confirmed.
+
+**Part D — Owner demo checklist:**
+- `docs/OWNER_DEMO_CHECKLIST.md` — new file. End-to-end 14-section checklist covering all portal workflows: auth, dashboard, customers, vehicles, appointments, ROs, inspections, estimates (manual items + internal pricing + presets + job groups), customer approval, invoices, Presets page, security verification, sidebar navigation, and a deferred items table.
+
+**Part E — Security audit (no changes needed):**
+- **No secrets in `src/`** — confirmed zero matches for all four secret key names.
+- **No Supabase `.delete()` calls** — the two `Set.delete()` calls in `PortalInspections.jsx` are JavaScript `Set` operations, not Supabase queries.
+- **Customer-facing Netlify function allowlists confirmed:**
+  - `get-approval-estimate.js`: `estimate_items` select = `id,item_type,description,quantity,unit_price_cents,line_total_cents,is_required,approval_status,estimate_job_id`
+  - `send-estimate-approval.js`: `estimate_items` select = `id, description, item_type, quantity, unit_price_cents, line_total_cents, is_required`
+  - `submit-estimate-approval.js`: `estimate_items` select = `id,item_type,description,line_total_cents,is_required,approval_status`
+  - `helcim-create-invoice.js`: uses `item.unit_price_cents` only (customer-facing price)
+  - None contain `cost_cents`, `markup_percent`, `markup_type`, `markup_value_cents`, `customer_unit_price_cents`, or `internal_notes`.
+
+**Acceptance criteria:**
+- [x] No phase numbers visible in portal UI.
+- [x] Invoices Sync button shows clean tooltip, no phase label.
+- [x] All pages have polished empty/loading/error states.
+- [x] Test data cleanup SQL created.
+- [x] Owner demo checklist created.
+- [x] No secrets in src.
+- [x] No Supabase `.delete()` calls.
+- [x] All four customer-facing functions use explicit column allowlists excluding internal pricing.
 - [x] Build passes.
 
 ---

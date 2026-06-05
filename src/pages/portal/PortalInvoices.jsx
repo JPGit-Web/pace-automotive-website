@@ -669,9 +669,8 @@ export default function PortalInvoices() {
                     </button>
                   )}
                   <button className="portalBtn portalBtnSecondary" disabled
-                    title="Webhook payment sync — coming in Phase 9D">
+                    title="Payment status syncs automatically via Helcim webhook">
                     <i className="fa-solid fa-arrows-rotate"></i> Sync
-                    <span style={{ fontSize:".7rem", marginLeft:5, opacity:.5 }}>Phase 9D</span>
                   </button>
                 </div>
                 {helcimSuccess && (
