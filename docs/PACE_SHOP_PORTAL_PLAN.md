@@ -129,7 +129,51 @@ The goal of Version 1 is a working, secure internal tool that replaces paper and
 - ✅ **13A** — Staff portal logo upgrade, full-width layout, inactivity auto sign-out, password visibility toggle
 - ✅ **13B** — Inline new customer + inline new vehicle inside RO intake; multiple concerns per repair order (`repair_order_concerns` table)
 - ✅ **13C** — Customer and vehicle service history view (read-only consolidated view of all ROs, concerns, inspections, estimates, invoices per customer or vehicle; compact history strip on RO detail panel)
-- ⬜ **13D+** — Estimate line item cost price, markup %, auto-calculated customer price; preset/canned jobs; horizontal estimate totals bar
+- ✅ **13D** — Estimate line item internal pricing: staff-only cost_cents, markup_percent, and customer_unit_price_cents columns; auto-calculation in Add/Edit Item modal; cost/markup never exposed to customer-facing pages, emails, or functions
+- ⬜ **13E+** — Preset/canned jobs for common services; horizontal estimate totals bar
+
+**Phase 14 — Print, Document, and Detail Modal Workflow (owner-requested, planning only):**
+
+These are larger than the Phase 13 incremental edits. They touch portal detail UI, printable document layouts, and estimate structure. Do not implement until Phase 13E+ is complete and the estimate/invoice data model is stable.
+
+- ⬜ **14A — Detail View Modals**
+  - RO, estimate, and invoice detail panels currently appear as large inline tiles below the list. Convert to centered modal/popup overlays.
+  - Preserve all existing actions inside modals: edit, status changes, start inspection, create/view estimate, send approval, create Helcim invoice, etc.
+  - Keep deep-link support where practical. No data loss on modal close.
+  - Mobile/tablet behaviour must remain usable.
+
+- ⬜ **14B — Printable Customer Invoice**
+  - Add a Print button to invoice detail.
+  - Build a professional letter-sized print layout matching the reference `invoice example.pdf`.
+  - Include: shop header/contact, invoice number, RO number, service advisor (if available), date, customer, vehicle (year/make/model/VIN/plate/color/odometer if available).
+  - Show grouped jobs/concerns, line items, notes per job, subtotal, GST, total, payment status, balance due.
+  - Include authorization/signature area and warranty/legal text as approved by owners.
+  - Use browser print CSS (`@media print`) or a dedicated print route — no third-party PDF library required for MVP.
+  - **Internal cost and markup must never appear on the customer invoice printout.**
+  - Customer approval page and print layout must stay token-protected.
+
+- ⬜ **14C — Printable Internal Repair Order**
+  - Add a Print Internal RO button to the RO detail panel (staff portal only).
+  - Build a mechanic-facing print layout based on `DRAFT RO Internal.pdf` reference.
+  - Auto-fill: customer name, date, year/make/model/trim, license plate, odometer, VIN, promised date.
+  - Auto-fill numbered customer concerns from `repair_order_concerns`.
+  - Include blank workspace areas for technician notes/findings.
+  - Staff-only — never accessible to public or customer-facing routes.
+
+- ⬜ **14D — RO Concerns to Estimate Job Groups**
+  - When creating an estimate from a repair order, auto-pull active `repair_order_concerns` and create a grouped job section per concern.
+  - Each concern becomes a named section/job header in the estimate builder.
+  - Staff add notes, labour, parts, supplies, fees, and discounts under each concern.
+  - Customer approval page and email show clearly grouped job sections.
+  - Helcim invoice creation continues using final customer-facing prices only.
+  - **May require a new `estimate_jobs` table** (or `estimate_items.estimate_job_id` / `repair_order_concern_id` column). Do not create schema until Phase 14D implementation begins and the current estimate model is reviewed.
+  - Must not break existing approval workflow, invoice creation, or cost/markup isolation.
+
+**Phase ordering recommendation:**
+1. Complete Phase 13E+ (canned jobs, totals bar) if still planned.
+2. Phase 14D (concern → job grouping) may need to connect with canned jobs and pricing — consider implementing after 13E+.
+3. Phase 14B/14C print layouts are best implemented after the estimate/invoice structure is stable (i.e., after 14D).
+4. Phase 14A (detail modals) can be done independently of 14B–14D.
 
 **Longer-term backlog:**
 - Multiple staff accounts / role-based permissions

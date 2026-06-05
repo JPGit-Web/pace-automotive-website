@@ -42,6 +42,8 @@ const EMPTY_ITEM_FORM = {
   item_type:           "labor",
   description:         "",
   quantity:            "1",
+  cost_dollars:        "",
+  markup_percent:      "",
   unit_price_dollars:  "0.00",
   is_required:         false,
   is_customer_visible: true,
@@ -69,6 +71,8 @@ function validateItemForm(d) {
   if (!d.description?.trim()) e.description = "Description is required.";
   if (parseFloat(d.quantity) < 0) e.quantity = "Quantity must be 0 or greater.";
   if (parseFloat(d.unit_price_dollars) < 0) e.unit_price_dollars = "Price must be 0 or greater.";
+  if (d.cost_dollars !== "" && parseFloat(d.cost_dollars) < 0) e.cost_dollars = "Cost must be 0 or greater.";
+  if (d.markup_percent !== "" && parseFloat(d.markup_percent) < 0) e.markup_percent = "Markup must be 0 or greater.";
   return e;
 }
 
@@ -88,9 +92,12 @@ function ItemForm({ formData, formErrors, onChange, saving, onSubmit, onClose, t
     Math.round((parseFloat(formData.unit_price_dollars) || 0) * 100)
   );
 
+  const hasCost   = formData.cost_dollars !== "" && !isNaN(parseFloat(formData.cost_dollars));
+  const hasMarkup = formData.markup_percent !== "" && !isNaN(parseFloat(formData.markup_percent));
+
   return (
     <div className="portalModalOverlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="portalModalCard" style={{ maxWidth:"520px" }} role="dialog" aria-modal="true">
+      <div className="portalModalCard" style={{ maxWidth:"540px" }} role="dialog" aria-modal="true">
         <div className="portalModalHeader">
           <h2 className="portalModalTitle">{title}</h2>
           <button className="portalModalClose" onClick={onClose}><i className="fa-solid fa-xmark"></i></button>
@@ -125,9 +132,41 @@ function ItemForm({ formData, formErrors, onChange, saving, onSubmit, onClose, t
                 {formErrors.description && <p className="portalFormFieldError">{formErrors.description}</p>}
               </div>
 
+              {/* Staff-only internal pricing — never shown to customers */}
+              <div className="portalItemPricingSection">
+                <p className="portalItemPricingLabel">
+                  <i className="fa-solid fa-lock" style={{ fontSize:".65rem", marginRight:5, opacity:.7 }}></i>
+                  Staff-Only Pricing — not shown to customers
+                </p>
+                <div className="portalFormRow">
+                  <div className="portalFormField">
+                    <label className="portalFormLabel">Internal Cost ($)</label>
+                    <input className={`portalFormInput${formErrors.cost_dollars ? " invalid" : ""}`}
+                      name="cost_dollars" type="number" min="0" step="0.01"
+                      value={formData.cost_dollars} onChange={onChange}
+                      placeholder="0.00" />
+                    {formErrors.cost_dollars && <p className="portalFormFieldError">{formErrors.cost_dollars}</p>}
+                  </div>
+                  <div className="portalFormField">
+                    <label className="portalFormLabel">Markup (%)</label>
+                    <input className={`portalFormInput${formErrors.markup_percent ? " invalid" : ""}`}
+                      name="markup_percent" type="number" min="0" step="0.1"
+                      value={formData.markup_percent} onChange={onChange}
+                      placeholder="0" />
+                    {formErrors.markup_percent && <p className="portalFormFieldError">{formErrors.markup_percent}</p>}
+                  </div>
+                </div>
+                {hasCost && hasMarkup && (
+                  <p style={{ margin:"0 0 4px", fontSize:".72rem", color:"var(--p-text-3)" }}>
+                    <i className="fa-solid fa-calculator" style={{ marginRight:4 }}></i>
+                    Auto-calculated from cost × (1 + markup%)
+                  </p>
+                )}
+              </div>
+
               <div className="portalFormRow">
                 <div className="portalFormField">
-                  <label className="portalFormLabel">Unit Price ($)</label>
+                  <label className="portalFormLabel">Customer Price ($)</label>
                   <input className={`portalFormInput${formErrors.unit_price_dollars ? " invalid" : ""}`}
                     name="unit_price_dollars" type="number" min="0" step="0.01"
                     value={formData.unit_price_dollars} onChange={onChange} />
@@ -389,7 +428,19 @@ export default function PortalEstimates() {
   /* ── Item form field handler ── */
   function handleItemField(e) {
     const { name, value, type, checked } = e.target;
-    setItemForm((p) => ({ ...p, [name]: type === "checkbox" ? checked : value }));
+    const newVal = type === "checkbox" ? checked : value;
+    setItemForm((p) => {
+      const updated = { ...p, [name]: newVal };
+      // Auto-calculate customer price when cost or markup changes
+      if (name === "cost_dollars" || name === "markup_percent") {
+        const cost   = parseFloat(name === "cost_dollars"   ? newVal : updated.cost_dollars);
+        const markup = parseFloat(name === "markup_percent" ? newVal : updated.markup_percent);
+        if (!isNaN(cost) && cost >= 0 && !isNaN(markup) && markup >= 0) {
+          updated.unit_price_dollars = (cost * (1 + markup / 100)).toFixed(2);
+        }
+      }
+      return updated;
+    });
     if (itemFormErrors[name]) setItemFormErrors((p) => ({ ...p, [name]: "" }));
   }
 
@@ -407,6 +458,8 @@ export default function PortalEstimates() {
       item_type:           item.item_type,
       description:         item.description,
       quantity:            item.quantity?.toString() ?? "1",
+      cost_dollars:        item.cost_cents != null ? (item.cost_cents / 100).toFixed(2) : "",
+      markup_percent:      item.markup_percent != null ? String(item.markup_percent) : "",
       unit_price_dollars:  ((item.unit_price_cents ?? 0) / 100).toFixed(2),
       is_required:         item.is_required ?? false,
       is_customer_visible: item.is_customer_visible ?? true,
@@ -573,7 +626,7 @@ export default function PortalEstimates() {
                         <th>Type</th>
                         <th>Description</th>
                         <th className="money">Qty</th>
-                        <th className="money">Unit Price</th>
+                        <th className="money">Customer Price</th>
                         <th className="money">Total</th>
                         <th>Status</th>
                         <th>Visible</th>
@@ -588,6 +641,12 @@ export default function PortalEstimates() {
                             <span style={{ fontWeight:600 }}>{item.description}</span>
                             {item.is_required && (
                               <span style={{ marginLeft:6, fontSize:".65rem", fontWeight:700, color:"var(--p-warning)", textTransform:"uppercase" }}>Required</span>
+                            )}
+                            {item.cost_cents != null && (
+                              <div className="portalItemCostHint">
+                                Cost: {fmtCents(item.cost_cents)}
+                                {item.markup_percent != null && ` · +${item.markup_percent}%`}
+                              </div>
                             )}
                             {item.notes && (
                               <div style={{ fontSize:".75rem", color:"var(--p-text-3)", marginTop:2 }}>{item.notes}</div>

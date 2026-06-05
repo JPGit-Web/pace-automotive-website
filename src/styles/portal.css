@@ -2264,3 +2264,34 @@
   .portalHistoryStrip { gap: 8px; }
   .portalVehDetailGrid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ============================================================
+   ESTIMATE ITEM INTERNAL PRICING — Staff-only fields (Phase 13D)
+   ============================================================ */
+
+/* Bordered section inside the Add/Edit Item modal */
+.portalItemPricingSection {
+  padding: 10px 12px;
+  background: rgba(11, 27, 58, .03);
+  border: 1px dashed var(--p-border);
+  border-radius: var(--p-radius-sm);
+  margin-bottom: 4px;
+}
+
+/* Section header label */
+.portalItemPricingLabel {
+  margin: 0 0 10px;
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--p-text-3);
+}
+
+/* Small cost/markup hint shown under description in the line-item table */
+.portalItemCostHint {
+  font-size: .7rem;
+  color: var(--p-text-3);
+  margin-top: 2px;
+  font-style: italic;
+}

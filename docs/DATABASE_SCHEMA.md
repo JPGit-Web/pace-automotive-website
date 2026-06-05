@@ -384,13 +384,34 @@ Replaces the single `repair_order.customer_concern` text field with a structured
 Phase 13C (customer/vehicle service history view) reads from existing tables only:
 `repair_orders`, `repair_order_concerns`, `inspections`, `estimates`, `helcim_invoices`, `activity_logs`, `customers`, `vehicles`. No migrations required.
 
+### ✅ Implemented: `estimate_items` pricing columns (Phase 13D — migration 009)
+
+Three staff-only pricing columns added to `estimate_items`:
+
+| Column | Type | Notes |
+|---|---|---|
+| `cost_cents` | int4 | **STAFF-ONLY.** Internal shop cost per unit in integer cents. Nullable. Check: >= 0. |
+| `markup_percent` | numeric(8,2) | **STAFF-ONLY.** Markup % applied to cost_cents (e.g. 30.00 = 30%). Nullable. Check: >= 0. |
+| `customer_unit_price_cents` | int4 | Customer-facing unit price in integer cents. Mirrors `unit_price_cents`. Nullable. Check: >= 0. |
+
+**Security rules (enforced in every customer-facing function):**
+- `cost_cents` and `markup_percent` must **never** appear in:
+  - `get-approval-estimate.js` select list
+  - `send-estimate-approval.js` select list
+  - `submit-estimate-approval.js` select list
+  - `helcim-create-invoice.js` select list
+  - Any customer-facing email or page
+- All four functions use explicit `select:` column lists that exclude these columns.
+- `unit_price_cents` remains the authoritative customer-facing price for all totals.
+
+**Calculation logic (frontend, staff portal only):**
+- If staff enters cost + markup → `customer_unit_price_cents = round(cost_cents × (1 + markup_percent / 100))`
+- Customer price can also be set directly (manual override).
+- `line_total_cents = customer_unit_price_cents × quantity`
+
 ---
 
-### Planned: `canned_jobs` (Phase 13D+)
-
----
-
-### Planned (Phase 13D+): `canned_jobs`
+### Planned (Phase 13E+): `canned_jobs`
 
 Saved job templates that staff can insert into estimates with one click.
 
@@ -425,17 +446,52 @@ Sub-items within a canned job. Allows a single customer-facing line to have inte
 
 ---
 
-### Planned column additions: `estimate_items`
+### Planned column addition: `estimate_items.canned_job_id` (Phase 13E+)
 
-Three new optional columns for cost tracking and profitability.
+When canned/preset jobs are implemented, a nullable FK column will be added:
 
 | Column | Type | Notes |
 |---|---|---|
-| `cost_cents` | integer | Nullable. Internal cost price. Never shown to customer. |
-| `markup_percent` | numeric(5,2) | Nullable. e.g. `30.00` for 30% markup. |
 | `canned_job_id` | uuid | Nullable. FK → `canned_jobs(id)` on delete set null. Tracks which canned job generated this item. |
 
-**Security rule:** `cost_cents` and `markup_percent` must never be returned by `get-approval-estimate.js` or any customer-facing Netlify Function.
+Do not add this column until Phase 13E+ implementation begins.
+
+---
+
+## Phase 14 — Planned Future Schema Additions
+
+These tables and columns are **not yet implemented**. They are planned for Phase 14 (Print, Document, and Detail Modal Workflow). Do not create migrations until Phase 14 implementation begins.
+
+---
+
+### Phase 14D — Planned: `estimate_jobs` (or `estimate_items` FK column)
+
+When RO concerns are used to auto-create grouped job sections in the estimate builder (Phase 14D), one of two approaches will be chosen after reviewing the existing estimate model:
+
+**Option A — New `estimate_jobs` table (preferred for clean grouping):**
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `estimate_id` | uuid | FK → `estimates(id)` on delete cascade |
+| `repair_order_concern_id` | uuid | Nullable. FK → `repair_order_concerns(id)` on delete set null. Links job to originating concern. |
+| `title` | text | Job/section heading shown to customer (e.g. "Engine noise on startup") |
+| `notes` | text | Nullable. Staff notes under this job, shown on customer-facing estimate and printout. |
+| `sort_order` | integer | Display order |
+| `is_active` | boolean | Default true. Soft delete. |
+| `created_at` | timestamptz | Auto |
+| `updated_at` | timestamptz | Auto via trigger |
+
+If this table is created, `estimate_items` would gain a nullable `estimate_job_id` FK column to group line items under a job.
+
+**Option B — FK column on `estimate_items` only (simpler, less structured):**
+- Add `repair_order_concern_id uuid null` to `estimate_items` directly.
+- Group items by concern at query/display time.
+- No separate job table needed.
+
+Decision deferred until Phase 14D implementation begins. Review existing estimate approval, Helcim invoice, and customer-facing functions before choosing.
+
+**Security rule:** Any job notes or grouping headers must use the same customer-facing column allowlists as `estimate_items`. Internal-only notes must be filtered from `get-approval-estimate.js` and all customer-facing functions.
 
 ---
 

@@ -987,27 +987,40 @@ export async function listEstimateItems(estimateId) {
 /**
  * Create a new estimate line item.
  * Accepts unit_price in dollars; converts to cents before storing.
+ * Phase 13D: also accepts cost_dollars and markup_percent (staff-only internal pricing).
+ * customer_unit_price_cents mirrors unit_price_cents for the authoritative customer price.
  */
 export async function createEstimateItem(estimateId, repairOrderId, itemData) {
   const qty       = Math.max(0, parseFloat(itemData.quantity) || 0);
   const unitCents = dollarsToCents(itemData.unit_price_dollars ?? itemData.unit_price_cents / 100 ?? 0);
   const lineCents = Math.round(qty * unitCents);
 
+  // Staff-only internal pricing fields (Phase 13D)
+  const costCents = (itemData.cost_dollars != null && itemData.cost_dollars !== "")
+    ? dollarsToCents(itemData.cost_dollars)
+    : null;
+  const markupPct = (itemData.markup_percent != null && itemData.markup_percent !== "")
+    ? parseFloat(itemData.markup_percent)
+    : null;
+
   const { data, error } = await supabase
     .from("estimate_items")
     .insert([{
-      estimate_id:         estimateId,
-      repair_order_id:     repairOrderId,
-      item_type:           itemData.item_type     ?? "labor",
-      description:         itemData.description,
-      quantity:            qty,
-      unit_price_cents:    unitCents,
-      line_total_cents:    lineCents,
-      is_required:         itemData.is_required         ?? false,
-      is_customer_visible: itemData.is_customer_visible ?? true,
-      notes:               itemData.notes               || null,
-      sort_order:          itemData.sort_order          ?? 0,
-      is_active:           true,
+      estimate_id:               estimateId,
+      repair_order_id:           repairOrderId,
+      item_type:                 itemData.item_type     ?? "labor",
+      description:               itemData.description,
+      quantity:                  qty,
+      unit_price_cents:          unitCents,
+      customer_unit_price_cents: unitCents,   // mirrors unit_price_cents
+      cost_cents:                costCents,
+      markup_percent:            markupPct,
+      line_total_cents:          lineCents,
+      is_required:               itemData.is_required         ?? false,
+      is_customer_visible:       itemData.is_customer_visible ?? true,
+      notes:                     itemData.notes               || null,
+      sort_order:                itemData.sort_order          ?? 0,
+      is_active:                 true,
     }])
     .select().single();
 
@@ -1023,22 +1036,35 @@ export async function createEstimateItem(estimateId, repairOrderId, itemData) {
 /**
  * Update an estimate line item. Recalculates line_total_cents from qty × unit_price.
  * Accepts unit_price in dollars via unit_price_dollars, or raw cents via unit_price_cents.
+ * Phase 13D: also accepts cost_dollars and markup_percent (staff-only internal pricing).
  */
 export async function updateEstimateItem(itemId, estimateId, itemData) {
-  const ALLOWED = ["item_type","description","quantity","unit_price_cents","is_required",
-                   "is_customer_visible","notes","approval_status","sort_order"];
+  const ALLOWED = ["item_type","description","quantity","unit_price_cents",
+                   "customer_unit_price_cents","cost_cents","markup_percent",
+                   "is_required","is_customer_visible","notes","approval_status","sort_order"];
   const payload = {};
   for (const k of ALLOWED) if (k in itemData) payload[k] = itemData[k] ?? null;
 
-  // If caller passed dollars, convert
+  // Convert dollars to cents if caller used dollar fields
   if ("unit_price_dollars" in itemData) {
     payload.unit_price_cents = dollarsToCents(itemData.unit_price_dollars);
   }
+  if ("cost_dollars" in itemData) {
+    payload.cost_cents = (itemData.cost_dollars != null && itemData.cost_dollars !== "")
+      ? dollarsToCents(itemData.cost_dollars)
+      : null;
+  }
+  if ("markup_percent" in itemData) {
+    payload.markup_percent = (itemData.markup_percent != null && itemData.markup_percent !== "")
+      ? parseFloat(itemData.markup_percent)
+      : null;
+  }
 
-  // Recalculate line total
+  // Recalculate line total from customer-facing unit price × qty
   const qty       = parseFloat(payload.quantity        ?? itemData.quantity)        ?? 1;
   const unitCents = parseInt(payload.unit_price_cents ?? itemData.unit_price_cents) ?? 0;
-  payload.line_total_cents = Math.round(Math.max(0, qty) * Math.max(0, unitCents));
+  payload.line_total_cents          = Math.round(Math.max(0, qty) * Math.max(0, unitCents));
+  payload.customer_unit_price_cents = Math.max(0, unitCents); // always mirror
 
   const { data, error } = await supabase
     .from("estimate_items").update(payload).eq("id", itemId).select().single();

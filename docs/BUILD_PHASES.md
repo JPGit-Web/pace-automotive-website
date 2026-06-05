@@ -665,7 +665,12 @@ cost_cents integer, default_price_cents integer, sort_order integer
 | 13A | Portal UI + session usability (logo, layout, inactivity, pw toggle) | ✅ Complete |
 | 13B | Repair order intake: inline new customer + inline new vehicle + multiple concerns | ✅ Complete |
 | 13C | Customer and vehicle service history view (read-only consolidated history per customer/vehicle) | ✅ Complete |
-| 13D+ | Remaining workflow improvements (pricing fields, canned jobs, horizontal totals bar) | ⬜ Not started |
+| 13D | Estimate line item internal cost, markup %, and customer price fields | ✅ Complete |
+| 13E+ | Remaining Phase 13 workflow improvements (canned/preset jobs, horizontal estimate totals bar) | ⬜ Not started |
+| 14A | Detail view modals — RO, estimate, and invoice details open as centered modals instead of inline panels | ⬜ Not started |
+| 14B | Printable customer invoice — Print button + professional letter-print layout (no internal cost/markup) | ⬜ Not started |
+| 14C | Printable internal RO — mechanic worksheet auto-filled from RO concerns, vehicle, customer | ⬜ Not started |
+| 14D | RO concerns → estimate job groups — concerns auto-populate as grouped sections in the estimate builder | ⬜ Not started |
 
 ---
 

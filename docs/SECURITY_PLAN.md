@@ -344,6 +344,54 @@ The following secrets are used only inside Netlify Functions — never in `src/`
 - Customer email addresses in server logs are now partially redacted (e.g., `ja***@gmail.com`).
 - No API tokens, service role keys, or raw approval tokens appear in any log.
 
-### Planned for Phase 13
-- Inactivity auto sign-out (10 min idle → warning → sign out)
-- Sign-in password visibility toggle
+### Staff-Only Pricing Fields Isolation (Phase 13D)
+
+Phase 13D added internal cost/markup columns to `estimate_items`. The following isolation guarantees are in place and must be preserved in all future changes:
+
+**Columns that are STAFF-ONLY (never customer-facing):**
+- `estimate_items.cost_cents`
+- `estimate_items.markup_percent`
+
+**How isolation is enforced — explicit column allowlists in every customer-facing function:**
+
+| Function | `estimate_items` select columns used |
+|---|---|
+| `get-approval-estimate.js` | `id, item_type, description, quantity, unit_price_cents, line_total_cents, is_required, approval_status` |
+| `send-estimate-approval.js` | `id, description, item_type, quantity, unit_price_cents, line_total_cents, is_required` |
+| `submit-estimate-approval.js` | `id, item_type, description, line_total_cents, is_required, approval_status` |
+| `helcim-create-invoice.js` | `description, quantity, unit_price_cents, line_total_cents, item_type, sort_order` |
+
+None of these lists include `cost_cents`, `markup_percent`, or `customer_unit_price_cents`.
+`unit_price_cents` remains the authoritative customer-facing price for all totals.
+
+**Rule:** Any future change to these functions must preserve the explicit allowlist. Never use `select: *` in customer-facing or Helcim-facing functions for `estimate_items`.
+
+---
+
+## 14. Phase 14 — Print, Document, and Modal Security Notes (Planning)
+
+These rules apply when Phase 14 is implemented. Record them here so they are not forgotten during implementation.
+
+### 14B — Printable Customer Invoice
+
+- The customer invoice print layout must use only customer-facing price fields: `unit_price_cents`, `line_total_cents`, `subtotal_cents`, `tax_cents`, `total_cents`, `amount_due_cents`.
+- `cost_cents`, `markup_percent`, and `customer_unit_price_cents` must **never** appear on the printed customer invoice.
+- Internal notes (staff-only fields on estimate items or repair orders) must not appear unless owners explicitly approve each field.
+- The print layout must be rendered inside the authenticated staff portal only — it must not be accessible at a public URL without a valid session or approval token.
+- If a printable route is added (e.g. `/portal/invoice/:id/print`), it must be wrapped in `ProtectedRoute`.
+- No card data, Helcim API tokens, service role keys, or raw approval tokens may appear in print output or in the JavaScript that generates it.
+
+### 14C — Printable Internal Repair Order
+
+- The internal RO print layout is **staff-only**. It must only be accessible inside authenticated portal routes.
+- It may include fields not shown to customers: internal notes, cost fields, markup, odometer details, service advisor name, etc. — subject to owner approval of which fields are included.
+- Public users must not be able to reach internal RO print routes. No unauthenticated access.
+- Do not generate a shareable public URL for internal RO printouts.
+
+### 14D — RO Concerns to Estimate Job Groups
+
+- Any new `estimate_jobs` table or `estimate_items.estimate_job_id` column must follow the same RLS rules as `estimate_items`: authenticated staff only, no anon access, no DELETE policy.
+- Job notes (internal staff notes per concern/job) must be excluded from `get-approval-estimate.js` and all customer-facing function `select:` lists.
+- Only customer-visible notes/titles should appear in the approval email and customer approval page.
+- If `estimate_jobs` is added, update the explicit column allowlists in all four customer-facing functions (`get-approval-estimate.js`, `send-estimate-approval.js`, `submit-estimate-approval.js`, `helcim-create-invoice.js`) before deploying.
+- Helcim invoice creation must continue using only `unit_price_cents` and `line_total_cents` — never cost or markup from any grouping table.
