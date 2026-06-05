@@ -5,10 +5,11 @@ import "../../styles/portal.css";
 
 export default function PortalLogin() {
   const navigate = useNavigate();
-  const [email,    setEmail]    = useState("");
-  const [password, setPassword] = useState("");
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState("");
+  const [email,       setEmail]       = useState("");
+  const [password,    setPassword]    = useState("");
+  const [showPassword,setShowPassword]= useState(false);
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState("");
 
   // If already logged in, skip the login page entirely
   useEffect(() => {
@@ -67,17 +68,35 @@ export default function PortalLogin() {
 
           <div style={{ ...styles.field, marginBottom: "20px" }}>
             <label style={styles.label} htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={styles.input}
-              placeholder="••••••••••••"
-              disabled={loading}
-            />
+            <div style={{ position: "relative" }}>
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={{ ...styles.input, paddingRight: "42px" }}
+                placeholder="••••••••••••"
+                disabled={loading}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                tabIndex={0}
+                style={{
+                  position: "absolute", right: "10px", top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none", border: "none",
+                  cursor: "pointer", padding: "4px",
+                  color: "#9aa0ae", fontSize: ".9rem",
+                  lineHeight: 1,
+                }}
+              >
+                <i className={showPassword ? "fa-solid fa-eye-slash" : "fa-solid fa-eye"}></i>
+              </button>
+            </div>
           </div>
 
           {error && (

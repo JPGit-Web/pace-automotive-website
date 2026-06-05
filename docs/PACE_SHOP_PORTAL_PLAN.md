@@ -120,8 +120,10 @@ The goal of Version 1 is a working, secure internal tool that replaces paper and
 
 ### Deferred to Future Phases
 
-**Phase 12 — SMS Approval Links:**
+**Phase 12 — SMS Approval Links (Deferred — pending owner/provider decision):**
 - SMS/text approval links (Twilio or similar, CASL-compliant)
+- Owners have not confirmed SMS provider or whether they want to invest in SMS notifications
+- Do not implement until owner approves
 
 **Phase 13 — Post-MVP Workflow Improvements (owner-requested):**
 - New Customer creation flow inside the New Repair Order modal (no page-switching)

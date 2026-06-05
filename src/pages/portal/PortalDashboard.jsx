@@ -146,8 +146,8 @@ export default function PortalDashboard() {
         </div>
       )}
 
-      {/* ── KPI Cards (6) ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "24px" }}>
+      {/* ── KPI Row — auto-fit, readable minimum 220px per card ── */}
+      <div className="portalDashKpis">
         <KpiCard color="navy"   loading={loading}
           label="Pending Appointments"
           value={data?.pendingApptsCount ?? "—"}
@@ -180,11 +180,11 @@ export default function PortalDashboard() {
           onClick={() => navigate("/portal/invoices")} />
       </div>
 
-      {/* ── Main content row ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 260px", gap: "20px", marginBottom: "20px" }}>
+      {/* ── Named grid: 5 direct siblings, placed by CSS grid-template-areas ── */}
+      <div className="portalDashboardMainGrid">
 
-        {/* ── Attention needed ── */}
-        <div className="portalCard">
+        {/* 1 — Needs Attention: left column, row 1 */}
+        <div className="portalCard dash-attention">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
             <p className="portalCardTitle" style={{ margin: 0 }}>
               Needs Attention
@@ -302,17 +302,17 @@ export default function PortalDashboard() {
           )}
         </div>
 
-        {/* ── Quick Actions ── */}
-        <div className="portalCard">
+        {/* 2 — Quick Actions: right column, row 1 */}
+        <div className="portalCard dash-quick">
           <p className="portalCardTitle">Quick Actions</p>
           <div className="portalQuickActions">
             {[
-              { label: "Appointments",  icon: "fa-solid fa-calendar-days", href: "/portal/appointments" },
-              { label: "Repair Orders", icon: "fa-solid fa-screwdriver-wrench", href: "/portal/repair-orders" },
-              { label: "Customers",     icon: "fa-solid fa-users",          href: "/portal/customers" },
-              { label: "Inspections",   icon: "fa-solid fa-clipboard-check",href: "/portal/inspections" },
+              { label: "Appointments",  icon: "fa-solid fa-calendar-days",       href: "/portal/appointments" },
+              { label: "Repair Orders", icon: "fa-solid fa-screwdriver-wrench",   href: "/portal/repair-orders" },
+              { label: "Customers",     icon: "fa-solid fa-users",               href: "/portal/customers" },
+              { label: "Inspections",   icon: "fa-solid fa-clipboard-check",     href: "/portal/inspections" },
               { label: "Estimates",     icon: "fa-solid fa-file-invoice-dollar", href: "/portal/estimates" },
-              { label: "Invoices",      icon: "fa-solid fa-receipt",         href: "/portal/invoices" },
+              { label: "Invoices",      icon: "fa-solid fa-receipt",             href: "/portal/invoices" },
             ].map((a) => (
               <button key={a.label} className="portalQuickAction" onClick={() => navigate(a.href)}>
                 <span className="portalQuickActionIcon"><i className={a.icon}></i></span>
@@ -322,70 +322,56 @@ export default function PortalDashboard() {
             ))}
           </div>
         </div>
-      </div>
 
-      {/* ── Active ROs + Recent Activity row ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
-
-        {/* Active repair orders */}
-        <div className="portalCard" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--p-border)" }}>
-            <p className="portalCardTitle" style={{ margin: 0 }}>Active Repair Orders</p>
-          </div>
+        {/* 3 — RO Pipeline: left column, row 2 */}
+        <div className="portalCard dash-pipeline">
+          <p className="portalCardTitle">RO Pipeline</p>
           {loading ? (
-            <div className="portalEmptyState" style={{ padding: "24px" }}>
-              <p style={{ color: "var(--p-text-3)", margin: 0 }}>Loading…</p>
-            </div>
-          ) : (data?.activeROs?.length ?? 0) === 0 ? (
-            <div className="portalEmptyState" style={{ padding: "24px" }}>
-              <p style={{ color: "var(--p-text-3)", margin: 0 }}>No active repair orders.</p>
-            </div>
+            <p style={{ color: "var(--p-text-3)", fontSize: ".85rem" }}>Loading…</p>
           ) : (
-            <table className="portalTable">
-              <thead>
-                <tr><th>RO #</th><th>Customer</th><th>Status</th><th>Promised</th></tr>
-              </thead>
-              <tbody>
-                {(data?.activeROs ?? []).map((ro) => (
-                  <tr key={ro.id} style={{ cursor: "pointer" }} onClick={() => navigate("/portal/repair-orders")}>
-                    <td style={{ fontFamily: "monospace", fontWeight: 700, color: "var(--p-navy)", fontSize: ".85rem" }}>{ro.ro_number}</td>
-                    <td style={{ fontSize: ".85rem" }}>{fullName(ro.customers)}</td>
-                    <td><span className={`portalBadge ${ro.status?.replace(/_/g, "-")}`} style={{ fontSize: ".7rem" }}>{ro.status?.replace(/_/g, " ")}</span></td>
-                    <td style={{ fontSize: ".78rem", color: isOverdue(ro.promised_date) ? "var(--p-danger)" : "var(--p-text-3)", fontWeight: isOverdue(ro.promised_date) ? 700 : 400 }}>
-                      {ro.promised_date ? fmtDateOnly(ro.promised_date) : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="portalStatusBar">
+              {PIPELINE_ORDER.map((s) => {
+                const count = data?.pipelineCounts?.[s] ?? 0;
+                const pct   = pipelineTotal > 0 ? Math.round((count / pipelineTotal) * 100) : 0;
+                return (
+                  <div className="portalStatusRow" key={s}>
+                    <span className="portalStatusRowLabel">{PIPELINE_LABELS[s]}</span>
+                    <div className="portalStatusRowTrack">
+                      <div className={`portalStatusRowFill ${PIPELINE_COLORS[s]}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="portalStatusRowCount">{count}</span>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
 
-        {/* Recent activity */}
-        <div className="portalCard" style={{ padding: 0, overflow: "hidden" }}>
+        {/* 4 — Recent Activity: right column, row 2 */}
+        <div className="portalCard dash-activity" style={{ padding: 0, overflow: "hidden" }}>
           <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--p-border)" }}>
             <p className="portalCardTitle" style={{ margin: 0 }}>Recent Activity</p>
           </div>
           {loading ? (
-            <div className="portalEmptyState" style={{ padding: "24px" }}>
+            <div style={{ padding: "20px" }}>
               <p style={{ color: "var(--p-text-3)", margin: 0 }}>Loading…</p>
             </div>
           ) : (data?.recentActivity?.length ?? 0) === 0 ? (
-            <div className="portalEmptyState" style={{ padding: "24px" }}>
-              <p style={{ color: "var(--p-text-3)", margin: 0 }}>No recent activity logged.</p>
+            <div style={{ padding: "20px" }}>
+              <p style={{ color: "var(--p-text-3)", margin: 0, fontSize: ".85rem" }}>No recent activity.</p>
             </div>
           ) : (
-            <div style={{ maxHeight: "320px", overflowY: "auto" }}>
+            <div style={{ maxHeight: "300px", overflowY: "auto" }}>
               {(data?.recentActivity ?? []).map((log) => (
-                <div key={log.id} style={{ display: "flex", gap: "10px", padding: "10px 16px", borderBottom: "1px solid var(--p-border)", alignItems: "flex-start" }}>
-                  <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "var(--p-bg)", border: "1px solid var(--p-border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: ".72rem", color: "var(--p-text-3)", flexShrink: 0 }}>
+                <div key={log.id} style={{ display: "flex", gap: "10px", padding: "9px 16px", borderBottom: "1px solid var(--p-border)", alignItems: "flex-start" }}>
+                  <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: "var(--p-bg)", border: "1px solid var(--p-border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: ".65rem", color: "var(--p-text-3)", flexShrink: 0 }}>
                     <i className="fa-solid fa-bolt"></i>
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: "0 0 2px", fontSize: ".82rem", fontWeight: 600, color: "var(--p-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <p style={{ margin: "0 0 1px", fontSize: ".8rem", fontWeight: 600, color: "var(--p-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {fmtAction(log.action)}
                     </p>
-                    <p style={{ margin: 0, fontSize: ".72rem", color: "var(--p-text-3)" }}>
+                    <p style={{ margin: 0, fontSize: ".7rem", color: "var(--p-text-3)" }}>
                       {log.entity_type} · {fmtDate(log.created_at)} {fmtTime(log.created_at)}
                     </p>
                   </div>
@@ -394,31 +380,45 @@ export default function PortalDashboard() {
             </div>
           )}
         </div>
-      </div>
 
-      {/* ── Work Order Pipeline ── */}
-      <div className="portalCard">
-        <p className="portalCardTitle">Work Order Pipeline</p>
-        {loading ? (
-          <p style={{ color: "var(--p-text-3)", fontSize: ".88rem" }}>Loading…</p>
-        ) : (
-          <div className="portalStatusBar">
-            {PIPELINE_ORDER.map((s) => {
-              const count = data?.pipelineCounts?.[s] ?? 0;
-              const pct   = pipelineTotal > 0 ? Math.round((count / pipelineTotal) * 100) : 0;
-              return (
-                <div className="portalStatusRow" key={s}>
-                  <span className="portalStatusRowLabel">{PIPELINE_LABELS[s]}</span>
-                  <div className="portalStatusRowTrack">
-                    <div className={`portalStatusRowFill ${PIPELINE_COLORS[s]}`} style={{ width: `${pct}%` }} />
-                  </div>
-                  <span className="portalStatusRowCount">{count}</span>
-                </div>
-              );
-            })}
+        {/* 5 — Active Repair Orders: spans both columns, row 3 */}
+        <div className="portalCard dash-activeROs" style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--p-border)" }}>
+            <p className="portalCardTitle" style={{ margin: 0 }}>Active Repair Orders</p>
           </div>
-        )}
-      </div>
+          {loading ? (
+            <div style={{ padding: "20px" }}>
+              <p style={{ color: "var(--p-text-3)", margin: 0 }}>Loading…</p>
+            </div>
+          ) : (data?.activeROs?.length ?? 0) === 0 ? (
+            <div style={{ padding: "20px" }}>
+              <p style={{ color: "var(--p-text-3)", margin: 0, fontSize: ".88rem" }}>No active repair orders.</p>
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table className="portalTable">
+                <thead>
+                  <tr><th>RO #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Promised</th></tr>
+                </thead>
+                <tbody>
+                  {(data?.activeROs ?? []).map((ro) => (
+                    <tr key={ro.id} style={{ cursor: "pointer" }} onClick={() => navigate("/portal/repair-orders")}>
+                      <td style={{ fontFamily: "monospace", fontWeight: 700, color: "var(--p-navy)", fontSize: ".85rem" }}>{ro.ro_number}</td>
+                      <td style={{ fontSize: ".85rem" }}>{fullName(ro.customers)}</td>
+                      <td style={{ fontSize: ".82rem", color: "var(--p-text-2)" }}>{vLabel(ro.vehicles)}</td>
+                      <td><span className={`portalBadge ${ro.status?.replace(/_/g, "-")}`} style={{ fontSize: ".7rem" }}>{ro.status?.replace(/_/g, " ")}</span></td>
+                      <td style={{ fontSize: ".78rem", color: isOverdue(ro.promised_date) ? "var(--p-danger)" : "var(--p-text-3)", fontWeight: isOverdue(ro.promised_date) ? 700 : 400 }}>
+                        {ro.promised_date ? fmtDateOnly(ro.promised_date) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+      </div>{/* end portalDashboardMainGrid */}
 
     </PortalLayout>
   );

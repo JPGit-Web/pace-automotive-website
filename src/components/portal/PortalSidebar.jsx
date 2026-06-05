@@ -16,8 +16,11 @@ export default function PortalSidebar() {
     <aside className="portalSidebar">
       {/* Brand */}
       <div className="portalBrand">
-        <p className="portalBrandName">P.A.C.E.</p>
-        <p className="portalBrandSub">Power Automotive<br />Centre of Excellence</p>
+        <img
+          src="/pace-logo.png"
+          alt="P.A.C.E. — Power Automotive Centre of Excellence"
+          className="portalBrandLogo"
+        />
         <span className="portalBrandBadge">Staff Portal</span>
       </div>
 
@@ -42,7 +45,7 @@ export default function PortalSidebar() {
 
       {/* Footer */}
       <div className="portalSidebarFooter">
-        <p className="portalVersionTag">Phase 2 — UI Shell</p>
+        <p className="portalVersionTag">Phase 13A</p>
       </div>
     </aside>
   );

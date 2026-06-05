@@ -71,9 +71,12 @@
 
 /* Brand block */
 .portalBrand {
-  padding: 20px 20px 16px;
+  padding: 14px 12px 12px;
   border-bottom: 1px solid rgba(255,255,255,.08);
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .portalBrandName {
@@ -93,10 +96,22 @@
   margin: 0;
 }
 
+.portalBrandLogo {
+  display: block;
+  width: 100%;          /* fill the padded sidebar interior */
+  max-width: 180px;     /* hard cap so it never overflows on very wide sidebars */
+  height: auto;
+  max-height: 108px;
+  object-fit: contain;
+  object-position: center;
+  margin-bottom: 8px;
+  /* Real logo colors — no filter */
+}
+
 .portalBrandBadge {
   display: inline-block;
-  margin-top: 8px;
-  padding: 2px 8px;
+  margin-top: 6px;
+  padding: 3px 10px;
   background: rgba(179,32,29,.25);
   border: 1px solid rgba(179,32,29,.5);
   border-radius: 4px;
@@ -258,8 +273,8 @@
 .portalContent {
   flex: 1;
   padding: 28px;
-  max-width: 1280px;
   width: 100%;
+  min-width: 0; /* prevents flex children from overflowing */
 }
 
 /* ============================================================
@@ -1912,4 +1927,68 @@
 .portalPayActionBtn:disabled {
   opacity: .45;
   cursor: not-allowed;
+}
+
+/* ============================================================
+   DASHBOARD NAMED GRID (Phase 13A)
+   ============================================================ */
+
+/* KPI row */
+.portalDashKpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+/*
+ * Main dashboard grid — explicit named areas.
+ * All five content cards are direct children of this grid.
+ * grid-template-areas defines the exact placement:
+ *   row 1: Needs Attention (left) | Quick Actions (right)
+ *   row 2: RO Pipeline (left)     | Recent Activity (right)
+ *   row 3: Active Repair Orders (spans both columns)
+ */
+.portalDashboardMainGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-areas:
+    "attention  quick"
+    "pipeline   activity"
+    "activeROs  activeROs";
+  gap: 20px;
+  align-items: start;
+  width: 100%;
+  margin-bottom: 0;
+}
+
+/* Grid area assignments — applied directly to each card */
+.dash-attention { grid-area: attention; }
+.dash-pipeline  { grid-area: pipeline; }
+.dash-activeROs { grid-area: activeROs; }
+
+/* Right-column cards stretch to match the height of the left card in the same row */
+.dash-quick     { grid-area: quick;    align-self: stretch; }
+.dash-activity  { grid-area: activity; align-self: stretch; }
+
+/* Responsive: single column, stacked in logical order */
+@media (max-width: 860px) {
+  .portalDashboardMainGrid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "attention"
+      "quick"
+      "pipeline"
+      "activity"
+      "activeROs";
+  }
+  .portalDashKpis {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .portalDashKpis {
+    grid-template-columns: 1fr 1fr;
+  }
 }

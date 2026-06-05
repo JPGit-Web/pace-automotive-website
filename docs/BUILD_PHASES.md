@@ -661,8 +661,9 @@ cost_cents integer, default_price_cents integer, sort_order integer
 | 9D | Helcim webhook payment sync | ✅ Built — awaiting live payment test |
 | 10 | Dashboard / shop command centre | ✅ Complete |
 | 11 | Portal polish, security hardening, production readiness | ✅ Complete |
-| 12 | SMS approval links | ⬜ Not started |
-| 13 | Post-MVP workflow improvements | ⬜ Not started |
+| 12 | SMS approval links | ⏸ Deferred — pending owner/provider decision |
+| 13A | Portal UI + session usability (logo, layout, inactivity, pw toggle) | ✅ Complete |
+| 13B+ | Workflow improvements (new customer in RO, concerns, history, pricing, canned jobs) | ⬜ Not started |
 
 ---
 
