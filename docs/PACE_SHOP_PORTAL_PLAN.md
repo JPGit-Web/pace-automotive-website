@@ -126,16 +126,10 @@ The goal of Version 1 is a working, secure internal tool that replaces paper and
 - Do not implement until owner approves
 
 **Phase 13 — Post-MVP Workflow Improvements (owner-requested):**
-- New Customer creation flow inside the New Repair Order modal (no page-switching)
-- Multiple customer concern entries per repair order (list-style, not one textarea)
-- Customer and vehicle service history view (consolidated past ROs, inspections, estimates, invoices)
-- Estimate line item cost price, markup percentage, and auto-calculated customer price fields
-- Preset / canned jobs for common services (oil change, brake pads, diagnostic fee, etc.)
-- Horizontal estimate totals bar at the bottom of the estimate builder
-- Staff portal logo upgrade — replace text-only branding with the real P.A.C.E. logo in the sidebar
-- Full-width portal layout — portal content uses more available window width on large screens
-- Inactivity auto sign-out — portal signs out staff after 10 minutes of no activity with a warning modal
-- Sign-in password visibility toggle — eye icon to show/hide password on the login screen
+- ✅ **13A** — Staff portal logo upgrade, full-width layout, inactivity auto sign-out, password visibility toggle
+- ✅ **13B** — Inline new customer + inline new vehicle inside RO intake; multiple concerns per repair order (`repair_order_concerns` table)
+- ✅ **13C** — Customer and vehicle service history view (read-only consolidated view of all ROs, concerns, inspections, estimates, invoices per customer or vehicle; compact history strip on RO detail panel)
+- ⬜ **13D+** — Estimate line item cost price, markup %, auto-calculated customer price; preset/canned jobs; horizontal estimate totals bar
 
 **Longer-term backlog:**
 - Multiple staff accounts / role-based permissions

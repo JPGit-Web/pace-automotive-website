@@ -664,7 +664,8 @@ cost_cents integer, default_price_cents integer, sort_order integer
 | 12 | SMS approval links | ⏸ Deferred — pending owner/provider decision |
 | 13A | Portal UI + session usability (logo, layout, inactivity, pw toggle) | ✅ Complete |
 | 13B | Repair order intake: inline new customer + inline new vehicle + multiple concerns | ✅ Complete |
-| 13C+ | Remaining workflow improvements (history, pricing, canned jobs) | ⬜ Not started |
+| 13C | Customer and vehicle service history view (read-only consolidated history per customer/vehicle) | ✅ Complete |
+| 13D+ | Remaining workflow improvements (pricing fields, canned jobs, horizontal totals bar) | ⬜ Not started |
 
 ---
 

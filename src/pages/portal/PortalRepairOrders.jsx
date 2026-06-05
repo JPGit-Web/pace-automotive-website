@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import PortalLayout from "../../components/portal/PortalLayout";
+import { supabase } from "../../lib/supabase";
 import {
   listRepairOrders, getRepairOrder, createRepairOrder,
   updateRepairOrder, updateRepairOrderStatus,
@@ -147,6 +148,8 @@ export default function PortalRepairOrders() {
   // Invoice state for current RO
   const [roInvoice,       setRoInvoice]       = useState(null);
   const [invLoading,      setInvLoading]      = useState(false);
+  // History counts for the compact strip (Part D)
+  const [historyCounts,   setHistoryCounts]   = useState(null);
   const navigate = useNavigate();
 
   /* ── Load repair orders ── */
@@ -160,24 +163,41 @@ export default function PortalRepairOrders() {
 
   /* ── Load detail + check for existing inspection ── */
   async function selectRO(ro) {
-    if (selected?.id === ro.id) { setSelected(null); setDetailData(null); setRoInspection(null); return; }
+    if (selected?.id === ro.id) { setSelected(null); setDetailData(null); setRoInspection(null); setHistoryCounts(null); return; }
     setSelected(ro);
     setDetailLoading(true);
     setRoInspection(null);
     setRoEstimate(null);
     setRoInvoice(null);
+    setHistoryCounts(null);
     try {
-      const [detail, insp, est, inv, concerns] = await Promise.all([
+      // ro.customers.id and ro.vehicles.id come from the list select
+      const custId = ro.customers?.id ?? null;
+      const vehId  = ro.vehicles?.id  ?? null;
+
+      const [detail, insp, est, inv, concerns, custCountRes, vehCountRes] = await Promise.all([
         getRepairOrder(ro.id),
         getInspectionByRepairOrder(ro.id).catch(() => null),
         getEstimateByRepairOrder(ro.id).catch(() => null),
         getHelcimInvoiceByRepairOrder(ro.id).catch(() => null),
         listRepairOrderConcerns(ro.id).catch(() => []),
+        custId
+          ? supabase.from("repair_orders").select("id", { count: "exact", head: true })
+              .eq("customer_id", custId).neq("id", ro.id)
+          : Promise.resolve({ count: 0 }),
+        vehId
+          ? supabase.from("repair_orders").select("id", { count: "exact", head: true })
+              .eq("vehicle_id", vehId).neq("id", ro.id)
+          : Promise.resolve({ count: 0 }),
       ]);
       setDetailData(detail);
       setRoInspection(insp);
       setRoEstimate(est);
       setRoInvoice(inv);
+      setHistoryCounts({
+        customer: custCountRes?.count ?? 0,
+        vehicle:  vehCountRes?.count  ?? 0,
+      });
       // Fall back to customer_concern if no structured rows yet
       if (concerns.length > 0) {
         setRoConcerns(concerns);
@@ -703,7 +723,7 @@ export default function PortalRepairOrders() {
                 </button>
               )}
               <button style={{ background:"none", border:"none", cursor:"pointer", color:"var(--p-text-3)", fontSize:".82rem", fontFamily:"inherit" }}
-                onClick={() => { setSelected(null); setDetailData(null); }}>
+                onClick={() => { setSelected(null); setDetailData(null); setHistoryCounts(null); }}>
                 ✕ Close
               </button>
             </div>
@@ -736,6 +756,42 @@ export default function PortalRepairOrders() {
                   </div>
                 </div>
               </div>
+
+              {/* Compact customer/vehicle history strip */}
+              {historyCounts && (historyCounts.customer > 0 || historyCounts.vehicle > 0) && (
+                <div className="portalHistoryStrip">
+                  <i className="fa-solid fa-clock-rotate-left" style={{ color: "var(--p-text-3)", fontSize: ".82rem" }}></i>
+                  {historyCounts.customer > 0 && (
+                    <span className="portalHistoryStripItem">
+                      <span className="portalHistoryStripCount">{historyCounts.customer}</span>
+                      other repair order{historyCounts.customer !== 1 ? "s" : ""} for this customer
+                      <button
+                        className="portalHistoryLinkBtn"
+                        onClick={() => navigate("/portal/customers")}
+                        style={{ marginLeft: 4 }}
+                      >
+                        Customer History
+                      </button>
+                    </span>
+                  )}
+                  {historyCounts.customer > 0 && historyCounts.vehicle > 0 && (
+                    <span style={{ color: "var(--p-border)" }}>|</span>
+                  )}
+                  {historyCounts.vehicle > 0 && (
+                    <span className="portalHistoryStripItem">
+                      <span className="portalHistoryStripCount">{historyCounts.vehicle}</span>
+                      other repair order{historyCounts.vehicle !== 1 ? "s" : ""} for this vehicle
+                      <button
+                        className="portalHistoryLinkBtn"
+                        onClick={() => navigate("/portal/vehicles")}
+                        style={{ marginLeft: 4 }}
+                      >
+                        Vehicle History
+                      </button>
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* 3-C fields — Customer Concerns use structured rows */}
               <div className="portalRODetailSection">

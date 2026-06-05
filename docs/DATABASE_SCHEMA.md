@@ -359,34 +359,38 @@ Append-only audit trail of significant actions in the portal. Never deleted.
 
 ---
 
-## Phase 13 — Planned Future Schema Additions
+## Phase 13 — Schema Additions
 
-These tables and column changes are **not yet implemented**. They are planned for Phase 13 (Post-MVP Workflow Improvements). Do not create migrations for these until Phase 13 begins.
+### ✅ Implemented: `repair_order_concerns` (Phase 13B)
 
----
-
-### Planned addition: `repair_order_concerns`
-
-Replaces or supplements the single `repair_order.customer_concern` text field with a structured list. Each row represents one customer-reported concern on the repair order.
+Replaces the single `repair_order.customer_concern` text field with a structured list. Each row is one customer-reported concern on a repair order.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid | Primary key |
 | `repair_order_id` | uuid | FK → `repair_orders(id)` on delete cascade |
 | `sort_order` | integer | Display order |
-| `description` | text | Customer's reported concern (e.g. "Engine noise on startup") |
-| `cause` | text | Nullable. Technician finding for this specific concern |
-| `correction` | text | Nullable. Work done to address this concern |
+| `concern_text` | text | Customer's reported concern |
+| `is_active` | boolean | Default true. Soft delete |
 | `created_at` | timestamptz | Auto |
 | `updated_at` | timestamptz | Auto via trigger |
 
 **Notes:**
-- The existing `repair_order.customer_concern`, `cause`, and `correction` columns can coexist during migration.
-- Future inspection items and estimate line items may optionally reference a `repair_order_concern_id` for traceability.
+- The existing `repair_order.customer_concern` column coexists for backward compatibility.
+- Soft delete only — use `is_active = false` instead of hard delete.
+
+### ✅ Phase 13C — Service History (no schema changes)
+
+Phase 13C (customer/vehicle service history view) reads from existing tables only:
+`repair_orders`, `repair_order_concerns`, `inspections`, `estimates`, `helcim_invoices`, `activity_logs`, `customers`, `vehicles`. No migrations required.
 
 ---
 
-### Planned addition: `canned_jobs`
+### Planned: `canned_jobs` (Phase 13D+)
+
+---
+
+### Planned (Phase 13D+): `canned_jobs`
 
 Saved job templates that staff can insert into estimates with one click.
 
@@ -404,7 +408,7 @@ Saved job templates that staff can insert into estimates with one click.
 
 ---
 
-### Planned addition: `canned_job_items` (optional, for bundled jobs)
+### Planned (Phase 13D+): `canned_job_items` (optional, for bundled jobs)
 
 Sub-items within a canned job. Allows a single customer-facing line to have internal cost breakdown (e.g. "Brake Job" = labour + front pads + rotors).
 

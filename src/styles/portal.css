@@ -2068,3 +2068,199 @@
   padding-top: 2px;
   min-width: 16px;
 }
+
+/* ============================================================
+   SERVICE HISTORY — Customer + Vehicle pages (Phase 13C)
+   ============================================================ */
+
+/* List of RO cards */
+.portalHistoryList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Single RO card */
+.portalHistoryRow {
+  border: 1px solid var(--p-border);
+  border-radius: var(--p-radius-sm);
+  overflow: hidden;
+  background: var(--p-surface);
+}
+
+/* Visually dim closed / cancelled ROs */
+.portalHistoryRow.closed {
+  opacity: .7;
+}
+
+/* Header bar inside each card */
+.portalHistoryRowHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: var(--p-bg);
+  border-bottom: 1px solid var(--p-border);
+  flex-wrap: wrap;
+}
+
+.portalHistoryRONum {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: .88rem;
+  color: var(--p-navy);
+}
+
+.portalHistoryDate {
+  font-size: .78rem;
+  color: var(--p-text-3);
+  white-space: nowrap;
+}
+
+/* Vehicle / mileage sub-row */
+.portalHistoryVehicle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: .82rem;
+  color: var(--p-text-2);
+  border-bottom: 1px solid var(--p-border);
+  background: var(--p-surface);
+  flex-wrap: wrap;
+}
+
+/* Detail rows (concerns, inspection, estimate, invoice) */
+.portalHistoryDetails {
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.portalHistoryDetailItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .82rem;
+  flex-wrap: wrap;
+}
+
+.portalHistoryDetailLabel {
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--p-text-3);
+  min-width: 72px;
+  flex-shrink: 0;
+}
+
+.portalHistoryDetailValue {
+  color: var(--p-text-2);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Small inline link button */
+.portalHistoryLinkBtn {
+  background: none;
+  border: 1px solid var(--p-border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-family: inherit;
+  font-size: .7rem;
+  font-weight: 600;
+  color: var(--p-navy);
+  cursor: pointer;
+  transition: background .1s, border-color .1s;
+  line-height: 1.5;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.portalHistoryLinkBtn:hover {
+  background: var(--p-bg);
+  border-color: var(--p-navy);
+}
+
+/* Empty state inside the history section */
+.portalHistoryEmpty {
+  padding: 20px;
+  text-align: center;
+  color: var(--p-text-3);
+  font-size: .85rem;
+  line-height: 1.6;
+}
+
+/* Compact history strip inside RO detail panel */
+.portalHistoryStrip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  background: var(--p-bg);
+  border: 1px solid var(--p-border);
+  border-radius: var(--p-radius-sm);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  font-size: .82rem;
+}
+
+.portalHistoryStripItem {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--p-text-2);
+}
+
+.portalHistoryStripCount {
+  font-weight: 700;
+  color: var(--p-navy);
+}
+
+/* Vehicle detail panel (PortalVehicles) */
+.portalVehDetailPanel {
+  margin: 0 20px 20px;
+  padding: 16px 18px;
+  background: var(--p-bg);
+  border: 1px solid var(--p-border);
+  border-radius: var(--p-radius-sm);
+}
+
+.portalVehDetailHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.portalVehDetailClose {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--p-text-3);
+  font-family: inherit;
+  font-size: .8rem;
+  white-space: nowrap;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.portalVehDetailClose:hover { color: var(--p-text); }
+
+.portalVehDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px 20px;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 600px) {
+  .portalHistoryRowHeader { gap: 6px; }
+  .portalHistoryDetailLabel { min-width: 60px; }
+  .portalHistoryStrip { gap: 8px; }
+  .portalVehDetailGrid { grid-template-columns: 1fr 1fr; }
+}

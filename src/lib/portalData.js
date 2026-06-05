@@ -1502,6 +1502,167 @@ export async function logActivity(action, entityType, entityId, details = null) 
 }
 
 // ─────────────────────────────────────────────────────────────
+// SERVICE HISTORY (Phase 13C — read-only)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Read-only consolidated service history for a customer.
+ * Returns the customer, their vehicles, all repair orders, and the
+ * concerns/inspections/estimates/invoices associated with those ROs.
+ * Uses separate queries to avoid PostgREST join ambiguity.
+ */
+export async function getCustomerServiceHistory(customerId) {
+  // 1. Customer
+  const { data: customer, error: custErr } = await supabase
+    .from("customers").select("*").eq("id", customerId).single();
+  if (custErr) throw custErr;
+
+  // 2. Active vehicles
+  const { data: vehicles } = await supabase
+    .from("vehicles")
+    .select("id, year, make, model, trim, color, license_plate, plate_province")
+    .eq("customer_id", customerId)
+    .eq("is_active", true)
+    .order("make", { ascending: true });
+
+  // 3. All repair orders for this customer (newest first)
+  const { data: repairOrders } = await supabase
+    .from("repair_orders")
+    .select("id, ro_number, status, payment_status, mileage_in, mileage_out, promised_date, created_at, vehicle_id")
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending: false });
+
+  const ros    = repairOrders ?? [];
+  const roIds  = ros.map((r) => r.id);
+
+  if (!roIds.length) {
+    return {
+      customer,
+      vehicles:      vehicles     ?? [],
+      repairOrders:  ros,
+      concerns:      [],
+      inspections:   [],
+      estimates:     [],
+      invoices:      [],
+      recentActivity: [],
+    };
+  }
+
+  // 4. Parallel fetches — all keyed by repair_order_id so the UI can group them
+  const [concernsRes, inspectionsRes, estimatesRes, invoicesRes, activityRes] = await Promise.all([
+    supabase.from("repair_order_concerns")
+      .select("id, repair_order_id, concern_text, sort_order")
+      .in("repair_order_id", roIds)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true }),
+
+    supabase.from("inspections")
+      .select("id, repair_order_id, status, completed_at")
+      .in("repair_order_id", roIds),
+
+    supabase.from("estimates")
+      .select("id, repair_order_id, estimate_number, status, total_cents, approved_total_cents, created_at")
+      .in("repair_order_id", roIds)
+      .order("created_at", { ascending: false }),
+
+    supabase.from("helcim_invoices")
+      .select("id, repair_order_id, helcim_invoice_number, status, payment_status, total_cents, amount_due_cents")
+      .in("repair_order_id", roIds)
+      .order("created_at", { ascending: false }),
+
+    // Recent activity for the customer entity only (non-fatal)
+    supabase.from("activity_logs")
+      .select("id, action, entity_type, entity_id, created_at")
+      .eq("entity_id", customerId)
+      .order("created_at", { ascending: false })
+      .limit(8),
+  ]);
+
+  return {
+    customer,
+    vehicles:      vehicles           ?? [],
+    repairOrders:  ros,
+    concerns:      concernsRes.data   ?? [],
+    inspections:   inspectionsRes.data ?? [],
+    estimates:     estimatesRes.data  ?? [],
+    invoices:      invoicesRes.data   ?? [],
+    recentActivity: activityRes.data  ?? [],
+  };
+}
+
+/**
+ * Read-only consolidated service history for a vehicle.
+ * Returns the vehicle, its owner, all repair orders for this vehicle,
+ * and the concerns/inspections/estimates/invoices linked to those ROs.
+ */
+export async function getVehicleServiceHistory(vehicleId) {
+  // 1. Vehicle
+  const { data: vehicle, error: vehErr } = await supabase
+    .from("vehicles")
+    .select("id, year, make, model, trim, color, license_plate, plate_province, customer_id")
+    .eq("id", vehicleId)
+    .single();
+  if (vehErr) throw vehErr;
+
+  // 2. Owner (optional — maybeSingle avoids PGRST116 if somehow orphaned)
+  let customer = null;
+  if (vehicle.customer_id) {
+    const { data } = await supabase
+      .from("customers")
+      .select("id, first_name, last_name, phone, email")
+      .eq("id", vehicle.customer_id)
+      .maybeSingle();
+    customer = data ?? null;
+  }
+
+  // 3. Repair orders for this vehicle (newest first)
+  const { data: repairOrders } = await supabase
+    .from("repair_orders")
+    .select("id, ro_number, status, payment_status, mileage_in, mileage_out, promised_date, created_at, vehicle_id")
+    .eq("vehicle_id", vehicleId)
+    .order("created_at", { ascending: false });
+
+  const ros   = repairOrders ?? [];
+  const roIds = ros.map((r) => r.id);
+
+  if (!roIds.length) {
+    return { vehicle, customer, repairOrders: ros, concerns: [], inspections: [], estimates: [], invoices: [] };
+  }
+
+  const [concernsRes, inspectionsRes, estimatesRes, invoicesRes] = await Promise.all([
+    supabase.from("repair_order_concerns")
+      .select("id, repair_order_id, concern_text, sort_order")
+      .in("repair_order_id", roIds)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true }),
+
+    supabase.from("inspections")
+      .select("id, repair_order_id, status, completed_at")
+      .in("repair_order_id", roIds),
+
+    supabase.from("estimates")
+      .select("id, repair_order_id, estimate_number, status, total_cents, approved_total_cents, created_at")
+      .in("repair_order_id", roIds)
+      .order("created_at", { ascending: false }),
+
+    supabase.from("helcim_invoices")
+      .select("id, repair_order_id, helcim_invoice_number, status, payment_status, total_cents, amount_due_cents")
+      .in("repair_order_id", roIds)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  return {
+    vehicle,
+    customer,
+    repairOrders: ros,
+    concerns:     concernsRes.data    ?? [],
+    inspections:  inspectionsRes.data ?? [],
+    estimates:    estimatesRes.data   ?? [],
+    invoices:     invoicesRes.data    ?? [],
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
 // DASHBOARD
 // ─────────────────────────────────────────────────────────────
 

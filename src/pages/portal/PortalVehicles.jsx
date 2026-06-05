@@ -1,15 +1,52 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import PortalLayout from "../../components/portal/PortalLayout";
-import { listVehicles } from "../../lib/portalData";
+import { listVehicles, getVehicleServiceHistory } from "../../lib/portalData";
 
 const vehicleLabel = (v) => [v.year, v.make, v.model].filter(Boolean).join(" ");
 
+const RO_STATUS_LABELS = {
+  draft:            "Draft",
+  active:           "Active",
+  waiting_approval: "Waiting Approval",
+  approved:         "Approved",
+  in_progress:      "In Progress",
+  completed:        "Completed",
+  invoiced:         "Invoiced",
+  closed:           "Closed",
+  cancelled:        "Cancelled",
+};
+const PAYMENT_LABELS = { unpaid: "Unpaid", partial: "Partial", paid: "Paid" };
+const INSP_STATUS_LABELS = {
+  draft:            "Draft",
+  in_progress:      "In Progress",
+  completed:        "Completed",
+  sent_to_customer: "Sent to Customer",
+};
+const EST_STATUS_LABELS = {
+  draft:              "Draft",
+  sent:               "Sent",
+  approved:           "Approved",
+  partially_approved: "Partially Approved",
+  declined:           "Declined",
+  expired:            "Expired",
+  cancelled:          "Cancelled",
+};
+
+const fmtDate    = (iso) => iso ? new Date(iso).toLocaleDateString("en-CA", { year:"numeric", month:"short", day:"numeric" }) : "—";
+const fmtCents   = (c)   => c != null ? `$${(c / 100).toFixed(2)}` : null;
+const statusCls  = (s)   => s?.replace(/_/g, "-") ?? "";
+
 export default function PortalVehicles() {
-  const [vehicles,  setVehicles]  = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState(null);
-  const [search,    setSearch]    = useState("");
-  const [selected,  setSelected]  = useState(null);
+  const navigate = useNavigate();
+
+  const [vehicles,        setVehicles]        = useState([]);
+  const [loading,         setLoading]         = useState(true);
+  const [error,           setError]           = useState(null);
+  const [search,          setSearch]          = useState("");
+  const [selected,        setSelected]        = useState(null);
+  const [vehHistory,      setVehHistory]      = useState(null);
+  const [vehHistLoading,  setVehHistLoading]  = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -24,6 +61,19 @@ export default function PortalVehicles() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  /* Load vehicle history whenever selection changes */
+  useEffect(() => {
+    if (!selected) { setVehHistory(null); return; }
+    let cancelled = false;
+    setVehHistLoading(true);
+    setVehHistory(null);
+    getVehicleServiceHistory(selected.id)
+      .then((h) => { if (!cancelled) setVehHistory(h); })
+      .catch(() => { if (!cancelled) setVehHistory({ error: true }); })
+      .finally(() => { if (!cancelled) setVehHistLoading(false); });
+    return () => { cancelled = true; };
+  }, [selected]);
 
   /* ── Client-side search ── */
   const filtered = vehicles.filter((v) => {
@@ -114,7 +164,7 @@ export default function PortalVehicles() {
                   <tr
                     key={v.id}
                     onClick={() => setSelected(selected?.id === v.id ? null : v)}
-                    style={{ cursor: "pointer" }}
+                    style={{ cursor: "pointer", background: selected?.id === v.id ? "rgba(11,27,58,.04)" : undefined }}
                   >
                     <td style={{ fontWeight: 700, color: "var(--p-navy)" }}>
                       {vehicleLabel(v)}
@@ -141,16 +191,11 @@ export default function PortalVehicles() {
               </tbody>
             </table>
 
-            {/* Inline detail panel */}
+            {/* Expanded vehicle detail + history panel */}
             {selected && (
-              <div style={{
-                margin: "0 20px 20px",
-                padding: "16px 18px",
-                background: "var(--p-bg)",
-                border: "1px solid var(--p-border)",
-                borderRadius: "var(--p-radius-sm)",
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+              <div className="portalVehDetailPanel">
+                {/* Panel header */}
+                <div className="portalVehDetailHeader">
                   <div>
                     <strong style={{ fontSize: "1rem", color: "var(--p-text)" }}>{vehicleLabel(selected)}</strong>
                     {selected.customers && (
@@ -160,19 +205,21 @@ export default function PortalVehicles() {
                     )}
                   </div>
                   <button
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--p-text-3)", fontFamily: "inherit", fontSize: ".8rem" }}
+                    className="portalVehDetailClose"
                     onClick={() => setSelected(null)}
                   >
                     ✕ Close
                   </button>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "12px 20px" }}>
+
+                {/* Vehicle fields */}
+                <div className="portalVehDetailGrid">
                   {[
-                    ["Trim",         selected.trim],
-                    ["Color",        selected.color],
-                    ["License Plate",selected.license_plate],
-                    ["Plate Province",selected.plate_province],
-                    ["VIN",          selected.vin],
+                    ["Trim",          selected.trim],
+                    ["Color",         selected.color],
+                    ["License Plate", selected.license_plate],
+                    ["Province",      selected.plate_province],
+                    ["VIN",           selected.vin],
                   ].map(([label, val]) => val ? (
                     <div key={label}>
                       <div className="portalDetailLabel">{label}</div>
@@ -186,9 +233,156 @@ export default function PortalVehicles() {
                     </div>
                   )}
                 </div>
-                <p style={{ margin: "12px 0 0", fontSize: ".75rem", color: "var(--p-text-3)" }}>
+
+                <p style={{ margin: "10px 0 16px", fontSize: ".75rem", color: "var(--p-text-3)" }}>
                   To edit or remove this vehicle, open the customer record.
                 </p>
+
+                {/* Service History */}
+                <div style={{ borderTop: "1px solid var(--p-border)", paddingTop: "16px" }}>
+                  <p className="portalSectionTitle" style={{ marginBottom: "12px" }}>
+                    <span>
+                      Service History
+                      {vehHistory?.repairOrders?.length > 0 && (
+                        <span className="portalCountBadge" style={{ marginLeft: 8 }}>
+                          {vehHistory.repairOrders.length}
+                        </span>
+                      )}
+                    </span>
+                  </p>
+
+                  {vehHistLoading ? (
+                    <p style={{ color: "var(--p-text-3)", fontSize: ".85rem" }}>Loading service history…</p>
+                  ) : !vehHistory || vehHistory.error ? (
+                    <p style={{ color: "var(--p-text-3)", fontSize: ".85rem" }}>Could not load service history.</p>
+                  ) : vehHistory.repairOrders.length === 0 ? (
+                    <div className="portalHistoryEmpty">
+                      <i className="fa-solid fa-clock-rotate-left" style={{ fontSize: "1.2rem", opacity: .25, display: "block", marginBottom: 6 }}></i>
+                      No service history yet for this vehicle.
+                    </div>
+                  ) : (
+                    <div className="portalHistoryList">
+                      {vehHistory.repairOrders.map((ro) => {
+                        const concerns   = vehHistory.concerns.filter((c) => c.repair_order_id === ro.id);
+                        const inspection = vehHistory.inspections.find((i) => i.repair_order_id === ro.id);
+                        const estimate   = vehHistory.estimates.find((e) => e.repair_order_id === ro.id);
+                        const invoice    = vehHistory.invoices.find((i) => i.repair_order_id === ro.id);
+                        const isClosed   = ro.status === "closed" || ro.status === "cancelled";
+
+                        return (
+                          <div key={ro.id} className={`portalHistoryRow${isClosed ? " closed" : ""}`}>
+                            <div className="portalHistoryRowHeader">
+                              <span className="portalHistoryRONum">{ro.ro_number}</span>
+                              <span className="portalHistoryDate">{fmtDate(ro.created_at)}</span>
+                              <span className={`portalBadge ${statusCls(ro.status)}`} style={{ fontSize: ".68rem" }}>
+                                {RO_STATUS_LABELS[ro.status] ?? ro.status}
+                              </span>
+                              <span className={`portalBadge ${ro.payment_status}`} style={{ fontSize: ".68rem" }}>
+                                {PAYMENT_LABELS[ro.payment_status] ?? ro.payment_status}
+                              </span>
+                              <div style={{ flex: 1 }} />
+                              <button
+                                className="portalHistoryLinkBtn"
+                                onClick={() => navigate("/portal/repair-orders")}
+                                title="Go to Repair Orders"
+                              >
+                                ROs <i className="fa-solid fa-arrow-right" style={{ fontSize: ".65rem" }}></i>
+                              </button>
+                            </div>
+
+                            {ro.mileage_in != null && (
+                              <div className="portalHistoryVehicle">
+                                <i className="fa-solid fa-gauge-high" style={{ opacity: .45, fontSize: ".78rem" }}></i>
+                                {ro.mileage_in.toLocaleString()} km in
+                                {ro.mileage_out != null && ` / ${ro.mileage_out.toLocaleString()} km out`}
+                              </div>
+                            )}
+
+                            {(concerns.length > 0 || inspection || estimate || invoice) && (
+                              <div className="portalHistoryDetails">
+                                {concerns.length > 0 && (
+                                  <div className="portalHistoryDetailItem">
+                                    <span className="portalHistoryDetailLabel">Concerns</span>
+                                    <span className="portalHistoryDetailValue">
+                                      {concerns.map((c) => c.concern_text).join(" · ")}
+                                    </span>
+                                  </div>
+                                )}
+                                {inspection && (
+                                  <div className="portalHistoryDetailItem">
+                                    <span className="portalHistoryDetailLabel">Inspection</span>
+                                    <span className={`portalBadge ${statusCls(inspection.status)}`} style={{ fontSize: ".65rem" }}>
+                                      {INSP_STATUS_LABELS[inspection.status] ?? inspection.status?.replace(/_/g, " ") ?? "—"}
+                                    </span>
+                                    <button
+                                      className="portalHistoryLinkBtn"
+                                      onClick={() => navigate("/portal/inspections", { state: { inspectionId: inspection.id } })}
+                                    >
+                                      View
+                                    </button>
+                                  </div>
+                                )}
+                                {estimate && (
+                                  <div className="portalHistoryDetailItem">
+                                    <span className="portalHistoryDetailLabel">Estimate</span>
+                                    {estimate.estimate_number && (
+                                      <span style={{ fontFamily: "monospace", fontSize: ".8rem", color: "var(--p-text-2)" }}>
+                                        {estimate.estimate_number}
+                                      </span>
+                                    )}
+                                    <span className={`portalBadge ${statusCls(estimate.status)}`} style={{ fontSize: ".65rem" }}>
+                                      {EST_STATUS_LABELS[estimate.status] ?? estimate.status}
+                                    </span>
+                                    {estimate.total_cents != null && (
+                                      <span style={{ fontSize: ".82rem", color: "var(--p-text-2)" }}>
+                                        {fmtCents(estimate.total_cents)}
+                                      </span>
+                                    )}
+                                    <button
+                                      className="portalHistoryLinkBtn"
+                                      onClick={() => navigate("/portal/estimates", { state: { estimateId: estimate.id } })}
+                                    >
+                                      View
+                                    </button>
+                                  </div>
+                                )}
+                                {invoice && (
+                                  <div className="portalHistoryDetailItem">
+                                    <span className="portalHistoryDetailLabel">Invoice</span>
+                                    {invoice.helcim_invoice_number && (
+                                      <span style={{ fontFamily: "monospace", fontSize: ".8rem", color: "var(--p-text-2)" }}>
+                                        {invoice.helcim_invoice_number}
+                                      </span>
+                                    )}
+                                    <span className={`portalBadge ${invoice.payment_status}`} style={{ fontSize: ".65rem" }}>
+                                      {PAYMENT_LABELS[invoice.payment_status] ?? invoice.payment_status}
+                                    </span>
+                                    {invoice.payment_status !== "paid" && invoice.amount_due_cents != null && (
+                                      <span style={{ fontSize: ".82rem", color: "var(--p-danger)" }}>
+                                        {fmtCents(invoice.amount_due_cents)} due
+                                      </span>
+                                    )}
+                                    {invoice.payment_status === "paid" && invoice.total_cents != null && (
+                                      <span style={{ fontSize: ".82rem", color: "var(--p-success)" }}>
+                                        {fmtCents(invoice.total_cents)} paid
+                                      </span>
+                                    )}
+                                    <button
+                                      className="portalHistoryLinkBtn"
+                                      onClick={() => navigate("/portal/invoices", { state: { invoiceId: invoice.id } })}
+                                    >
+                                      View
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </>

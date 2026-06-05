@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import PortalLayout from "../../components/portal/PortalLayout";
 import {
   listCustomers, createCustomer, updateCustomer, softDeleteCustomer,
   listVehiclesByCustomer, createVehicle, updateVehicle, softDeleteVehicle,
-  logActivity,
+  logActivity, getCustomerServiceHistory,
 } from "../../lib/portalData";
 
 /* ── Constants ─────────────────────────────────────────────── */
@@ -74,6 +75,8 @@ export default function PortalCustomers() {
   const [formErrors,       setFormErrors]       = useState({});
   const [saving,           setSaving]           = useState(false);
   const [saveError,        setSaveError]        = useState("");
+  const [history,          setHistory]          = useState(null);
+  const [historyLoading,   setHistoryLoading]   = useState(false);
 
   /* ── Load customers ── */
   const loadCustomers = useCallback(async () => {
@@ -102,16 +105,31 @@ export default function PortalCustomers() {
     }
   }, []);
 
+  /* ── Load service history for selected customer ── */
+  const loadHistory = useCallback(async (customerId) => {
+    setHistoryLoading(true);
+    setHistory(null);
+    try {
+      setHistory(await getCustomerServiceHistory(customerId));
+    } catch {
+      setHistory({ error: true });
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
   /* ── Navigation ── */
   function selectCustomer(customer) {
     setSelectedCustomer(customer);
     setView("detail");
     loadVehicles(customer.id);
+    loadHistory(customer.id);
   }
 
   function backToList() {
     setSelectedCustomer(null);
     setCustomerVehicles([]);
+    setHistory(null);
     setView("list");
   }
 
@@ -269,6 +287,8 @@ export default function PortalCustomers() {
           customer={selectedCustomer}
           vehicles={customerVehicles}
           vehiclesLoading={vehiclesLoading}
+          history={history}
+          historyLoading={historyLoading}
           onBack={backToList}
           onEditCustomer={() => openModal("customer", "edit", selectedCustomer)}
           onDeleteCustomer={() => handleDeleteCustomer(selectedCustomer)}
@@ -440,6 +460,7 @@ function ListView({
    ============================================================ */
 function DetailView({
   customer, vehicles, vehiclesLoading,
+  history, historyLoading,
   onBack, onEditCustomer, onDeleteCustomer,
   onAddVehicle, onEditVehicle, onDeleteVehicle,
 }) {
@@ -545,6 +566,9 @@ function DetailView({
           </div>
         )}
       </div>
+
+      {/* Service History */}
+      <ServiceHistorySection history={history} loading={historyLoading} />
     </>
   );
 }
@@ -557,6 +581,212 @@ function InfoItem({ label, value }) {
       <div className={`portalDetailValue${!value ? " empty" : ""}`}>
         {value || "Not provided"}
       </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   SERVICE HISTORY SECTION
+   ============================================================ */
+const RO_STATUS_LABELS = {
+  draft:            "Draft",
+  active:           "Active",
+  waiting_approval: "Waiting Approval",
+  approved:         "Approved",
+  in_progress:      "In Progress",
+  completed:        "Completed",
+  invoiced:         "Invoiced",
+  closed:           "Closed",
+  cancelled:        "Cancelled",
+};
+const PAYMENT_LABELS = { unpaid: "Unpaid", partial: "Partial", paid: "Paid" };
+
+const INSP_STATUS_LABELS = {
+  draft:             "Draft",
+  in_progress:       "In Progress",
+  completed:         "Completed",
+  sent_to_customer:  "Sent to Customer",
+};
+
+const EST_STATUS_LABELS = {
+  draft:              "Draft",
+  sent:               "Sent",
+  approved:           "Approved",
+  partially_approved: "Partially Approved",
+  declined:           "Declined",
+  expired:            "Expired",
+  cancelled:          "Cancelled",
+};
+
+const fmtHistDate = (iso) =>
+  iso ? new Date(iso).toLocaleDateString("en-CA", { year: "numeric", month: "short", day: "numeric" }) : "—";
+const fmtCents = (cents) => (cents != null ? `$${(cents / 100).toFixed(2)}` : null);
+const roStatusClass = (s) => s?.replace(/_/g, "-") ?? "";
+
+function ServiceHistorySection({ history, loading }) {
+  const navigate = useNavigate();
+
+  return (
+    <div className="portalCard" style={{ marginTop: "20px" }}>
+      <p className="portalSectionTitle">
+        <span>
+          Service History
+          {history?.repairOrders?.length > 0 && (
+            <span className="portalCountBadge" style={{ marginLeft: 8 }}>
+              {history.repairOrders.length}
+            </span>
+          )}
+        </span>
+      </p>
+
+      {loading ? (
+        <p style={{ color: "var(--p-text-3)", fontSize: ".85rem", margin: 0 }}>
+          Loading service history…
+        </p>
+      ) : !history || history.error ? (
+        <p style={{ color: "var(--p-text-3)", fontSize: ".85rem", margin: 0 }}>
+          Could not load service history.
+        </p>
+      ) : history.repairOrders.length === 0 ? (
+        <div className="portalHistoryEmpty">
+          <i className="fa-solid fa-clock-rotate-left" style={{ fontSize: "1.4rem", opacity: .25, display: "block", marginBottom: 8 }}></i>
+          No service history yet for this customer.
+        </div>
+      ) : (
+        <div className="portalHistoryList">
+          {history.repairOrders.map((ro) => {
+            const concerns   = history.concerns.filter((c) => c.repair_order_id === ro.id);
+            const inspection = history.inspections.find((i) => i.repair_order_id === ro.id);
+            const estimate   = history.estimates.find((e) => e.repair_order_id === ro.id);
+            const invoice    = history.invoices.find((i) => i.repair_order_id === ro.id);
+            const vehicle    = history.vehicles.find((v) => v.id === ro.vehicle_id);
+            const vLabel     = vehicle
+              ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")
+              : null;
+
+            const isClosed = ro.status === "closed" || ro.status === "cancelled";
+
+            return (
+              <div key={ro.id} className={`portalHistoryRow${isClosed ? " closed" : ""}`}>
+                {/* Header row */}
+                <div className="portalHistoryRowHeader">
+                  <span className="portalHistoryRONum">{ro.ro_number}</span>
+                  <span className="portalHistoryDate">{fmtHistDate(ro.created_at)}</span>
+                  <span className={`portalBadge ${roStatusClass(ro.status)}`} style={{ fontSize: ".68rem" }}>
+                    {RO_STATUS_LABELS[ro.status] ?? ro.status}
+                  </span>
+                  <span className={`portalBadge ${ro.payment_status}`} style={{ fontSize: ".68rem" }}>
+                    {PAYMENT_LABELS[ro.payment_status] ?? ro.payment_status}
+                  </span>
+                  <div style={{ flex: 1 }} />
+                  <button
+                    className="portalHistoryLinkBtn"
+                    onClick={() => navigate("/portal/repair-orders")}
+                    title="Go to Repair Orders"
+                  >
+                    ROs <i className="fa-solid fa-arrow-right" style={{ fontSize: ".65rem" }}></i>
+                  </button>
+                </div>
+
+                {/* Vehicle line */}
+                {vLabel && (
+                  <div className="portalHistoryVehicle">
+                    <i className="fa-solid fa-car" style={{ opacity: .45, fontSize: ".78rem" }}></i>
+                    {vLabel}
+                    {vehicle?.license_plate && (
+                      <span style={{ color: "var(--p-text-3)" }}>— {vehicle.license_plate}</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Detail rows */}
+                {(concerns.length > 0 || inspection || estimate || invoice) && (
+                  <div className="portalHistoryDetails">
+                    {concerns.length > 0 && (
+                      <div className="portalHistoryDetailItem">
+                        <span className="portalHistoryDetailLabel">Concerns</span>
+                        <span className="portalHistoryDetailValue">
+                          {concerns.map((c) => c.concern_text).join(" · ")}
+                        </span>
+                      </div>
+                    )}
+
+                    {inspection && (
+                      <div className="portalHistoryDetailItem">
+                        <span className="portalHistoryDetailLabel">Inspection</span>
+                        <span className={`portalBadge ${roStatusClass(inspection.status)}`} style={{ fontSize: ".65rem" }}>
+                          {INSP_STATUS_LABELS[inspection.status] ?? inspection.status?.replace(/_/g, " ") ?? "—"}
+                        </span>
+                        <button
+                          className="portalHistoryLinkBtn"
+                          onClick={() => navigate("/portal/inspections", { state: { inspectionId: inspection.id } })}
+                        >
+                          View
+                        </button>
+                      </div>
+                    )}
+
+                    {estimate && (
+                      <div className="portalHistoryDetailItem">
+                        <span className="portalHistoryDetailLabel">Estimate</span>
+                        {estimate.estimate_number && (
+                          <span style={{ fontFamily: "monospace", fontSize: ".8rem", color: "var(--p-text-2)" }}>
+                            {estimate.estimate_number}
+                          </span>
+                        )}
+                        <span className={`portalBadge ${roStatusClass(estimate.status)}`} style={{ fontSize: ".65rem" }}>
+                          {EST_STATUS_LABELS[estimate.status] ?? estimate.status}
+                        </span>
+                        {estimate.total_cents != null && (
+                          <span style={{ fontSize: ".82rem", color: "var(--p-text-2)" }}>
+                            {fmtCents(estimate.total_cents)}
+                          </span>
+                        )}
+                        <button
+                          className="portalHistoryLinkBtn"
+                          onClick={() => navigate("/portal/estimates", { state: { estimateId: estimate.id } })}
+                        >
+                          View
+                        </button>
+                      </div>
+                    )}
+
+                    {invoice && (
+                      <div className="portalHistoryDetailItem">
+                        <span className="portalHistoryDetailLabel">Invoice</span>
+                        {invoice.helcim_invoice_number && (
+                          <span style={{ fontFamily: "monospace", fontSize: ".8rem", color: "var(--p-text-2)" }}>
+                            {invoice.helcim_invoice_number}
+                          </span>
+                        )}
+                        <span className={`portalBadge ${invoice.payment_status}`} style={{ fontSize: ".65rem" }}>
+                          {PAYMENT_LABELS[invoice.payment_status] ?? invoice.payment_status}
+                        </span>
+                        {invoice.payment_status !== "paid" && invoice.amount_due_cents != null && (
+                          <span style={{ fontSize: ".82rem", color: "var(--p-danger)" }}>
+                            {fmtCents(invoice.amount_due_cents)} due
+                          </span>
+                        )}
+                        {invoice.payment_status === "paid" && invoice.total_cents != null && (
+                          <span style={{ fontSize: ".82rem", color: "var(--p-success)" }}>
+                            {fmtCents(invoice.total_cents)} paid
+                          </span>
+                        )}
+                        <button
+                          className="portalHistoryLinkBtn"
+                          onClick={() => navigate("/portal/invoices", { state: { invoiceId: invoice.id } })}
+                        >
+                          View
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
