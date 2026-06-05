@@ -214,10 +214,21 @@ These are larger than the Phase 13 incremental edits. They touch portal detail U
   - `docs/TEST_DATA_CLEANUP.sql` — manual SQL script for Supabase Dashboard to soft-delete test customers and all linked records (in dependency order), with SELECT preview queries and safety ROLLBACK.
   - `docs/OWNER_DEMO_CHECKLIST.md` — 14-section end-to-end QA checklist covering auth, all portal pages, estimate pricing modes, customer approval safety, invoice print, Presets page, and security verification.
 
-**Phase 16A — Appointment Calendar (Planned, not yet scheduled):**
-- Full calendar view for appointments with day/week grid, drag-to-reschedule, and status colour coding.
-- Appointment calendar remains deferred until owner confirms desired calendar UX and whether Google Calendar integration is wanted.
-- Do not implement until owner approves.
+- ✅ **16A — Appointment Calendar**
+  - Month calendar view on the Appointments page (default); List view still available via toggle.
+  - Appointments placed by submission date (`created_at`) — `preferred_date` is free text and not parseable. Nav bar shows "Shown by submission date" note. Future `scheduled_date` column would enable proper placement.
+  - Status colour coding: pending = amber, confirmed = blue, converted = green, cancelled = gray strikethrough.
+  - Clicking an event opens the shared detail panel (status change, Convert to RO).
+  - 60-second auto-refresh interval. Loading/error/empty states in the calendar container.
+  - Pure React, no external calendar library. Responsive — compact layout below 640 px.
+  - No schema changes.
+
+**Phase 16B / future — deferred:**
+- Google Calendar sync — pending owner confirmation.
+- SMS appointment reminders — pending provider decision.
+- `scheduled_date` / `scheduled_start` / `scheduled_end` columns on `appointment_requests` — pending owner schema approval.
+- Week / day calendar views.
+- Drag-to-reschedule (requires `scheduled_date` first).
 
 ---
 

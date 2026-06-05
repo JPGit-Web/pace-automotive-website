@@ -3070,3 +3070,292 @@
   /* Page setup for RO worksheet */
   @page { size: letter portrait; margin: 0.55in; }
 }
+
+/* ============================================================
+   APPOINTMENT CALENDAR — Phase 16A
+   ============================================================ */
+
+/* View toggle (Calendar / List) */
+.apptViewToggle {
+  display: flex;
+  gap: 3px;
+  background: var(--p-bg);
+  border: 1px solid var(--p-border);
+  border-radius: var(--p-radius-sm);
+  padding: 3px;
+  flex-shrink: 0;
+}
+
+.apptViewBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  color: var(--p-text-2);
+  font-size: .82rem;
+  font-weight: 500;
+  border-radius: calc(var(--p-radius-sm) - 2px);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .12s, color .12s;
+  white-space: nowrap;
+}
+
+.apptViewBtn:hover {
+  background: rgba(11,27,58,.06);
+  color: var(--p-navy);
+}
+
+.apptViewBtn.active {
+  background: var(--p-navy);
+  color: #fff;
+}
+
+/* Calendar outer container */
+.apptCal {
+  background: #fff;
+  border: 1px solid var(--p-border);
+  border-radius: var(--p-radius);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+/* Navigation bar */
+.apptCalNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--p-border);
+  background: var(--p-bg);
+  gap: 12px;
+}
+
+.apptCalNavTitle {
+  font-size: .98rem;
+  font-weight: 700;
+  color: var(--p-navy);
+  letter-spacing: .2px;
+  flex: 1;
+  text-align: center;
+}
+
+.apptCalNavBtns {
+  display: flex;
+  gap: 4px;
+}
+
+.apptCalNavBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: 1px solid var(--p-border);
+  background: #fff;
+  color: var(--p-text-1);
+  font-size: .78rem;
+  font-weight: 500;
+  border-radius: var(--p-radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .12s, border-color .12s;
+}
+
+.apptCalNavBtn:hover {
+  background: var(--p-bg);
+  border-color: var(--p-navy);
+}
+
+.apptCalNavNote {
+  font-size: .72rem;
+  color: var(--p-text-3);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+/* Week day header row */
+.apptCalWeekRow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid var(--p-border);
+  background: var(--p-bg);
+}
+
+.apptCalWeekLabel {
+  padding: 5px 4px;
+  text-align: center;
+  font-size: .68rem;
+  font-weight: 700;
+  color: var(--p-text-3);
+  letter-spacing: .5px;
+  text-transform: uppercase;
+}
+
+/* Day grid */
+.apptCalGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.apptCalCell {
+  min-height: 92px;
+  border-right: 1px solid var(--p-border);
+  border-bottom: 1px solid var(--p-border);
+  padding: 4px 3px 3px;
+}
+
+.apptCalCell:nth-child(7n) {
+  border-right: none;
+}
+
+/* Last row — remove bottom border */
+.apptCalGrid > .apptCalCell:nth-last-child(-n+7):nth-child(7n+1),
+.apptCalGrid > .apptCalCell:nth-last-child(-n+7):nth-child(7n+1) ~ .apptCalCell {
+  border-bottom: none;
+}
+
+.apptCalCell.otherMonth {
+  background: #fafafa;
+}
+
+/* Today highlight */
+.apptCalCell.today .apptCalDayNum {
+  background: var(--p-navy);
+  color: #fff;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.apptCalDayNum {
+  font-size: .73rem;
+  font-weight: 600;
+  color: var(--p-text-2);
+  margin-bottom: 2px;
+  padding: 1px 3px;
+  min-width: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.apptCalCell.otherMonth .apptCalDayNum {
+  color: var(--p-text-3);
+  opacity: .45;
+}
+
+/* Event chips */
+.apptCalEvent {
+  display: block;
+  width: 100%;
+  font-size: .71rem;
+  padding: 2px 5px;
+  margin-bottom: 2px;
+  border-radius: 3px;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  font-family: inherit;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity .1s, box-shadow .1s;
+}
+
+.apptCalEvent:hover {
+  opacity: .82;
+}
+
+.apptCalEvent.selected {
+  box-shadow: 0 0 0 2px var(--p-navy);
+}
+
+/* Status colours */
+.apptCalEvent.status-pending {
+  background: #fef9e7;
+  border-left-color: #f5c842;
+  color: #7a5c00;
+}
+
+.apptCalEvent.status-confirmed {
+  background: #e8f4fd;
+  border-left-color: #3b82f6;
+  color: #1e40af;
+}
+
+.apptCalEvent.status-converted {
+  background: #e8f8f0;
+  border-left-color: #22c55e;
+  color: #15803d;
+}
+
+.apptCalEvent.status-cancelled {
+  background: #f3f4f6;
+  border-left-color: #9ca3af;
+  color: #6b7280;
+  text-decoration: line-through;
+  opacity: .65;
+}
+
+.apptCalEventSub {
+  opacity: .7;
+}
+
+/* Overflow "+N more" */
+.apptCalMore {
+  font-size: .66rem;
+  color: var(--p-text-3);
+  padding: 1px 4px;
+  cursor: default;
+}
+
+/* Empty month message */
+.apptCalEmpty {
+  text-align: center;
+  padding: 36px 20px;
+  color: var(--p-text-3);
+  font-size: .85rem;
+  border-top: 1px solid var(--p-border);
+}
+
+/* Responsive: compact on small screens */
+@media (max-width: 640px) {
+  .apptCalCell {
+    min-height: 58px;
+    padding: 2px 1px;
+  }
+
+  .apptCalEvent {
+    font-size: .64rem;
+    padding: 1px 3px;
+  }
+
+  .apptCalEventSub {
+    display: none;
+  }
+
+  .apptCalWeekLabel {
+    font-size: .6rem;
+    padding: 4px 1px;
+    letter-spacing: 0;
+  }
+
+  .apptCalNavNote {
+    display: none;
+  }
+
+  .apptCalNavTitle {
+    font-size: .88rem;
+  }
+}

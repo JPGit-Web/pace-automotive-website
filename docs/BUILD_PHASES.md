@@ -823,6 +823,7 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 | 15A | Percent or fixed dollar markup on estimate items and preset items | ✅ Complete |
 | 15B | Sidebar / portal UX cleanup — move Presets to footer Setup section | ✅ Complete |
 | 15C | Owner-ready cleanup / QA — stale label removal, test data cleanup SQL, owner demo checklist, security audit | ✅ Complete |
+| 16A | Appointment calendar — month view with status colours, view toggle (Calendar / List), 60 s auto-refresh | ✅ Complete |
 
 ---
 
@@ -919,6 +920,49 @@ Setup (section label) → Presets (NavLink, active-highlighted) → P.A.C.E. Por
 - [x] No secrets in src.
 - [x] No Supabase `.delete()` calls.
 - [x] All four customer-facing functions use explicit column allowlists excluding internal pricing.
+- [x] Build passes.
+
+---
+
+### Phase 16A — Appointment Calendar
+
+**Implemented:**
+- `src/pages/portal/PortalAppointments.jsx` — Complete rewrite adding month calendar while preserving all existing list/modal/convert functionality.
+  - **View toggle**: "Calendar" (default) / "List" button pair in the page header, styled with `apptViewToggle` / `apptViewBtn.active`.
+  - **AppCalendar component**: Pure React month grid (no external library). 7-column grid with week-day header row, day number cells, today highlight (navy circle), prev/next month gray cells. Month navigation: `← Prev`, `Today`, `Next →` buttons.
+  - **Event chips**: Each appointment appears as a colored chip on its submission date (`created_at`). Chips are `<button>` elements — clicking selects the appointment and opens the shared detail panel below. Truncated with ellipsis; tooltip shows full name + service + preferred time.
+  - **Status colours**: pending = amber, confirmed = blue, converted = green, cancelled = gray strikethrough.
+  - **Selected state**: `box-shadow` ring on the chip matching the currently selected appointment.
+  - **Overflow**: If > 3 appointments on one day, shows "+N more" label.
+  - **Empty month**: Friendly message below grid when no appointments exist for the displayed month.
+  - **Loading / error states**: Loading spinner text and error retry button shown inside the calendar container (not page-level).
+  - **Auto-refresh**: 60-second interval via `setInterval` in a separate `useEffect` (cleaned up on unmount). Keeps calendar current without page reload.
+  - **Shared detail panel**: The existing appointment detail panel (status change, Convert to RO, info grid) appears below both calendar and list views when an appointment is selected.
+  - **List view unchanged**: All existing search, status filters, table, and modals work exactly as before.
+- `src/styles/portal.css` — New `APPOINTMENT CALENDAR` section (~180 lines): `.apptViewToggle`, `.apptViewBtn`, `.apptCal`, `.apptCalNav`, `.apptCalNavTitle`, `.apptCalNavBtns`, `.apptCalNavBtn`, `.apptCalNavNote`, `.apptCalWeekRow`, `.apptCalWeekLabel`, `.apptCalGrid`, `.apptCalCell`, `.apptCalCell.otherMonth`, `.apptCalCell.today`, `.apptCalDayNum`, `.apptCalEvent`, `.apptCalEvent.status-{pending,confirmed,converted,cancelled}`, `.apptCalEventSub`, `.apptCalMore`, `.apptCalEmpty`. Responsive breakpoint at `max-width: 640px` collapses cell height, hides service sub-label and nav note.
+
+**Date field note:**
+`appointment_requests.preferred_date` is a free-text field (user types "Wednesday morning" etc.) — not parseable as a calendar date. Appointments are placed by `created_at` (submission timestamp). The "Shown by submission date" note in the calendar nav makes this transparent to staff. A future `scheduled_date DATE` column would enable proper calendar-date placement when the owner schedules a confirmed time.
+
+**No schema changes. No new tables. No Netlify function changes.**
+
+**Deferred (Phase 16B / future):**
+- Google Calendar sync — deferred until owner confirms interest.
+- SMS appointment reminders — deferred pending provider decision.
+- `scheduled_date` / `scheduled_start` / `scheduled_end` columns on `appointment_requests` — deferred until owner approves schema change.
+- Week / day views — can be added to `AppCalendar` in a future phase.
+- Drag-to-reschedule — requires `scheduled_date` column first.
+
+**Acceptance criteria:**
+- [x] Calendar view loads as default. List view toggle works.
+- [x] Existing appointment requests appear on correct dates (by created_at).
+- [x] pending / confirmed / converted / cancelled show distinct colours.
+- [x] Clicking an event selects it and opens the detail panel.
+- [x] Month navigation works (prev / next / today).
+- [x] Empty month shows friendly message.
+- [x] All list view behaviour (search, filters, table) unchanged.
+- [x] Add Request modal still works; new request appears on refresh.
+- [x] Convert to RO still works.
 - [x] Build passes.
 
 ---

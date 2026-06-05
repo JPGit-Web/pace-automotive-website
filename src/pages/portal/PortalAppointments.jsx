@@ -33,6 +33,11 @@ const SOURCE_LABELS = {
   walk_in:  "Walk-in",
 };
 
+const MONTH_NAMES = [
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December",
+];
+
 const EMPTY_FORM = {
   source:            "phone",
   name:              "",
@@ -102,6 +107,12 @@ export default function PortalAppointments() {
   const [convertCustomers,setConvertCustomers]= useState([]);
   const [convertVehicles, setConvertVehicles] = useState([]);
   const [custLoadingConv, setCustLoadingConv] = useState(false);
+  // Calendar state
+  const [view,     setView]     = useState("calendar");
+  const [calMonth, setCalMonth] = useState(() => {
+    const t = new Date();
+    return new Date(t.getFullYear(), t.getMonth(), 1);
+  });
 
   /* ── Load ── */
   const load = useCallback(async () => {
@@ -117,6 +128,12 @@ export default function PortalAppointments() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  /* Auto-refresh every 60 seconds while the page is open */
+  useEffect(() => {
+    const id = setInterval(load, 60_000);
+    return () => clearInterval(id);
+  }, [load]);
 
   /* ── Filter ── */
   const filtered = requests.filter((r) => {
@@ -139,7 +156,17 @@ export default function PortalAppointments() {
     return acc;
   }, {});
 
-  /* ── Row click ── */
+  /* ── Calendar month navigation ── */
+  function handleMonthNav(dir) {
+    if (dir === 0) {
+      const t = new Date();
+      setCalMonth(new Date(t.getFullYear(), t.getMonth(), 1));
+    } else {
+      setCalMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + dir, 1));
+    }
+  }
+
+  /* ── Row/event click ── */
   function selectRequest(r) {
     setSelected((prev) => (prev?.id === r.id ? null : r));
   }
@@ -267,12 +294,10 @@ export default function PortalAppointments() {
       await logActivity("appointment.converted_to_repair_order", "appointment_request", selected.id, {
         ro_number: ro.ro_number, appointment_name: selected.name,
       });
-      // Update local state
       const updatedAppt = { ...selected, status: "converted", repair_order_id: ro.id };
       setRequests((p) => p.map((r) => r.id === selected.id ? updatedAppt : r));
       setSelected(updatedAppt);
       closeConvertModal();
-      // Navigate to the new RO
       navigate("/portal/repair-orders");
     } catch {
       setConvertError("Failed to convert appointment. Please try again.");
@@ -292,134 +317,170 @@ export default function PortalAppointments() {
             Web form submissions and manually entered phone/walk-in requests.
           </p>
         </div>
-        <button className="portalBtn portalBtnPrimary" onClick={openModal}>
-          <i className="fa-solid fa-plus"></i> Add Request
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {/* View toggle */}
+          <div className="apptViewToggle">
+            <button
+              className={`apptViewBtn${view === "calendar" ? " active" : ""}`}
+              onClick={() => setView("calendar")}
+            >
+              <i className="fa-solid fa-calendar-days"></i> Calendar
+            </button>
+            <button
+              className={`apptViewBtn${view === "list" ? " active" : ""}`}
+              onClick={() => setView("list")}
+            >
+              <i className="fa-solid fa-list"></i> List
+            </button>
+          </div>
+          <button className="portalBtn portalBtnPrimary" onClick={openModal}>
+            <i className="fa-solid fa-plus"></i> Add Request
+          </button>
+        </div>
       </div>
 
-      {/* Toolbar: search + status filters */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px" }}>
-        <div className="portalToolbar" style={{ marginBottom: 0 }}>
-          <div className="portalSearchBar">
-            <i className="fa-solid fa-magnifying-glass"></i>
-            <input
-              className="portalSearchInput"
-              placeholder="Search by name, phone, email, vehicle, or service…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          {filtered.length > 0 && (
-            <span style={{ fontSize: ".82rem", color: "var(--p-text-3)" }}>
-              {filtered.length} result{filtered.length !== 1 ? "s" : ""}
-            </span>
-          )}
-        </div>
+      {/* Calendar view */}
+      {view === "calendar" && (
+        <AppCalendar
+          requests={requests}
+          calMonth={calMonth}
+          onMonthNav={handleMonthNav}
+          onSelect={selectRequest}
+          selected={selected}
+          loading={loading}
+          error={error}
+          onRetry={load}
+        />
+      )}
 
-        <div className="portalFilterTabs">
-          {STATUS_FILTERS.map((s) => (
-            <button
-              key={s}
-              className={`portalFilterTab${statusFilter === s ? " active" : ""}`}
-              onClick={() => setStatusFilter(s)}
-            >
-              {s === "all" ? "All" : STATUS_LABELS[s]}
-              {s !== "all" && counts[s] ? (
-                <span style={{ marginLeft: 6, fontSize: ".72rem", opacity: .75 }}>
-                  {counts[s]}
-                </span>
-              ) : null}
-              {s === "all" && (
-                <span style={{ marginLeft: 6, fontSize: ".72rem", opacity: .75 }}>
-                  {requests.length}
+      {/* List view: toolbar + table */}
+      {view === "list" && (
+        <>
+          {/* Toolbar: search + status filters */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px" }}>
+            <div className="portalToolbar" style={{ marginBottom: 0 }}>
+              <div className="portalSearchBar">
+                <i className="fa-solid fa-magnifying-glass"></i>
+                <input
+                  className="portalSearchInput"
+                  placeholder="Search by name, phone, email, vehicle, or service…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              {filtered.length > 0 && (
+                <span style={{ fontSize: ".82rem", color: "var(--p-text-3)" }}>
+                  {filtered.length} result{filtered.length !== 1 ? "s" : ""}
                 </span>
               )}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Main table */}
-      <div className="portalCard" style={{ padding: 0, overflow: "hidden" }}>
-        {loading ? (
-          <div className="portalEmptyState">
-            <p style={{ color: "var(--p-text-3)" }}>Loading appointment requests…</p>
-          </div>
-        ) : error ? (
-          <div className="portalEmptyState">
-            <div className="portalEmptyIcon">⚠️</div>
-            <p className="portalEmptyTitle">Could not load requests</p>
-            <p className="portalEmptyDesc">{error}</p>
-            <button className="portalBtn portalBtnSecondary" onClick={load}>Try Again</button>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="portalEmptyState">
-            <div className="portalEmptyIcon">
-              <i className="fa-solid fa-calendar-days" style={{ opacity: .25 }}></i>
             </div>
-            <p className="portalEmptyTitle">
-              {search || statusFilter !== "all"
-                ? "No requests match your filters"
-                : "No appointment requests yet"}
-            </p>
-            <p className="portalEmptyDesc">
-              {search || statusFilter !== "all"
-                ? "Try clearing the search or changing the status filter."
-                : "Requests submitted through the public booking form will appear here automatically."}
-            </p>
-          </div>
-        ) : (
-          <table className="portalTable">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Name</th>
-                <th>Phone</th>
-                <th>Service</th>
-                <th>Preferred Time</th>
-                <th>Source</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r) => (
-                <tr
-                  key={r.id}
-                  onClick={() => selectRequest(r)}
-                  style={{
-                    cursor: "pointer",
-                    background: selected?.id === r.id ? "rgba(11,27,58,.04)" : undefined,
-                  }}
-                >
-                  <td style={{ fontSize: ".83rem", color: "var(--p-text-2)", whiteSpace: "nowrap" }}>
-                    {fmtDate(r.created_at)}
-                  </td>
-                  <td style={{ fontWeight: 600, color: "var(--p-navy)" }}>{r.name}</td>
-                  <td style={{ fontSize: ".88rem", color: "var(--p-text-2)" }}>{r.phone}</td>
-                  <td style={{ fontSize: ".85rem", color: "var(--p-text-2)" }}>
-                    {r.service_requested || <span style={{ color: "var(--p-text-3)" }}>—</span>}
-                  </td>
-                  <td style={{ fontSize: ".83rem", color: "var(--p-text-2)" }}>
-                    {r.preferred_date || <span style={{ color: "var(--p-text-3)" }}>—</span>}
-                  </td>
-                  <td>
-                    <span className={`portalBadge ${sourceClass(r.source)}`}>
-                      {SOURCE_LABELS[r.source] ?? r.source}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`portalBadge ${r.status}`}>
-                      {STATUS_LABELS[r.status] ?? r.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
 
-      {/* Detail panel — shown when a row is selected */}
+            <div className="portalFilterTabs">
+              {STATUS_FILTERS.map((s) => (
+                <button
+                  key={s}
+                  className={`portalFilterTab${statusFilter === s ? " active" : ""}`}
+                  onClick={() => setStatusFilter(s)}
+                >
+                  {s === "all" ? "All" : STATUS_LABELS[s]}
+                  {s !== "all" && counts[s] ? (
+                    <span style={{ marginLeft: 6, fontSize: ".72rem", opacity: .75 }}>
+                      {counts[s]}
+                    </span>
+                  ) : null}
+                  {s === "all" && (
+                    <span style={{ marginLeft: 6, fontSize: ".72rem", opacity: .75 }}>
+                      {requests.length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Main table */}
+          <div className="portalCard" style={{ padding: 0, overflow: "hidden" }}>
+            {loading ? (
+              <div className="portalEmptyState">
+                <p style={{ color: "var(--p-text-3)" }}>Loading appointment requests…</p>
+              </div>
+            ) : error ? (
+              <div className="portalEmptyState">
+                <div className="portalEmptyIcon">⚠️</div>
+                <p className="portalEmptyTitle">Could not load requests</p>
+                <p className="portalEmptyDesc">{error}</p>
+                <button className="portalBtn portalBtnSecondary" onClick={load}>Try Again</button>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="portalEmptyState">
+                <div className="portalEmptyIcon">
+                  <i className="fa-solid fa-calendar-days" style={{ opacity: .25 }}></i>
+                </div>
+                <p className="portalEmptyTitle">
+                  {search || statusFilter !== "all"
+                    ? "No requests match your filters"
+                    : "No appointment requests yet"}
+                </p>
+                <p className="portalEmptyDesc">
+                  {search || statusFilter !== "all"
+                    ? "Try clearing the search or changing the status filter."
+                    : "Requests submitted through the public booking form will appear here automatically."}
+                </p>
+              </div>
+            ) : (
+              <table className="portalTable">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Name</th>
+                    <th>Phone</th>
+                    <th>Service</th>
+                    <th>Preferred Time</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((r) => (
+                    <tr
+                      key={r.id}
+                      onClick={() => selectRequest(r)}
+                      style={{
+                        cursor: "pointer",
+                        background: selected?.id === r.id ? "rgba(11,27,58,.04)" : undefined,
+                      }}
+                    >
+                      <td style={{ fontSize: ".83rem", color: "var(--p-text-2)", whiteSpace: "nowrap" }}>
+                        {fmtDate(r.created_at)}
+                      </td>
+                      <td style={{ fontWeight: 600, color: "var(--p-navy)" }}>{r.name}</td>
+                      <td style={{ fontSize: ".88rem", color: "var(--p-text-2)" }}>{r.phone}</td>
+                      <td style={{ fontSize: ".85rem", color: "var(--p-text-2)" }}>
+                        {r.service_requested || <span style={{ color: "var(--p-text-3)" }}>—</span>}
+                      </td>
+                      <td style={{ fontSize: ".83rem", color: "var(--p-text-2)" }}>
+                        {r.preferred_date || <span style={{ color: "var(--p-text-3)" }}>—</span>}
+                      </td>
+                      <td>
+                        <span className={`portalBadge ${sourceClass(r.source)}`}>
+                          {SOURCE_LABELS[r.source] ?? r.source}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`portalBadge ${r.status}`}>
+                          {STATUS_LABELS[r.status] ?? r.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Detail panel — shared between calendar and list views */}
       {selected && (
         <div className="portalApptDetail">
           <div className="portalApptDetailHeader">
@@ -722,6 +783,161 @@ function DetailField({ label, value }) {
       <div className={`portalDetailValue${!value ? " empty" : ""}`}>
         {value || "Not provided"}
       </div>
+    </div>
+  );
+}
+
+/* ── Month calendar component ─────────────────────────────── */
+function AppCalendar({ requests, calMonth, onMonthNav, onSelect, selected, loading, error, onRetry }) {
+  const year  = calMonth.getFullYear();
+  const month = calMonth.getMonth();
+
+  const now      = new Date();
+  const todayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+
+  /* Group requests by submission date (created_at) */
+  const byDate = {};
+  requests.forEach((r) => {
+    const d   = new Date(r.created_at);
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    if (!byDate[key]) byDate[key] = [];
+    byDate[key].push(r);
+  });
+
+  /* Build 7-column grid cells */
+  const firstDow     = new Date(year, month, 1).getDay();     // 0=Sun
+  const daysInMonth  = new Date(year, month + 1, 0).getDate();
+  const daysInPrev   = new Date(year, month, 0).getDate();
+  const prevYear     = month === 0 ? year - 1 : year;
+  const prevMonth    = month === 0 ? 11 : month - 1;
+  const nextYear     = month === 11 ? year + 1 : year;
+  const nextMonth    = month === 11 ? 0 : month + 1;
+
+  const cells = [];
+  for (let i = firstDow - 1; i >= 0; i--)
+    cells.push({ day: daysInPrev - i, y: prevYear,  m: prevMonth, other: true });
+  for (let d = 1; d <= daysInMonth; d++)
+    cells.push({ day: d, y: year, m: month, other: false });
+  let nd = 1;
+  while (cells.length % 7 !== 0)
+    cells.push({ day: nd++, y: nextYear, m: nextMonth, other: true });
+
+  const hasThisMonth = requests.some((r) => {
+    const d = new Date(r.created_at);
+    return d.getFullYear() === year && d.getMonth() === month;
+  });
+
+  const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  if (loading) {
+    return (
+      <div className="apptCal">
+        <CalNav year={year} month={month} onMonthNav={onMonthNav} />
+        <div className="apptCalEmpty">
+          <p style={{ color: "var(--p-text-3)" }}>Loading appointments…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="apptCal">
+        <CalNav year={year} month={month} onMonthNav={onMonthNav} />
+        <div className="apptCalEmpty">
+          <div style={{ fontSize: "1.4rem", marginBottom: 8 }}>⚠️</div>
+          <p style={{ fontWeight: 600, marginBottom: 6 }}>Could not load appointments</p>
+          <button className="portalBtn portalBtnSecondary" onClick={onRetry}>Try Again</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="apptCal">
+      <CalNav year={year} month={month} onMonthNav={onMonthNav} />
+
+      {/* Week day headers */}
+      <div className="apptCalWeekRow">
+        {WEEK_DAYS.map((d) => (
+          <div key={d} className="apptCalWeekLabel">{d}</div>
+        ))}
+      </div>
+
+      {/* Day grid */}
+      <div className="apptCalGrid">
+        {cells.map((cell, i) => {
+          const key      = `${cell.y}-${cell.m}-${cell.day}`;
+          const isToday  = !cell.other && key === todayKey;
+          const dayAppts = cell.other ? [] : (byDate[key] || []);
+          const visible  = dayAppts.slice(0, 3);
+          const overflow = dayAppts.length - visible.length;
+
+          return (
+            <div
+              key={i}
+              className={[
+                "apptCalCell",
+                cell.other  ? "otherMonth" : "",
+                isToday     ? "today"      : "",
+              ].filter(Boolean).join(" ")}
+            >
+              <div className="apptCalDayNum">{cell.day}</div>
+              {visible.map((r) => (
+                <button
+                  key={r.id}
+                  className={[
+                    "apptCalEvent",
+                    `status-${r.status}`,
+                    selected?.id === r.id ? "selected" : "",
+                  ].filter(Boolean).join(" ")}
+                  onClick={() => onSelect(r)}
+                  title={`${r.name}${r.service_requested ? " — " + r.service_requested : ""}${r.preferred_date ? " · " + r.preferred_date : ""}`}
+                >
+                  {r.name}
+                  {r.service_requested && (
+                    <span className="apptCalEventSub"> · {r.service_requested}</span>
+                  )}
+                </button>
+              ))}
+              {overflow > 0 && (
+                <div className="apptCalMore">+{overflow} more</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {!hasThisMonth && (
+        <div className="apptCalEmpty">
+          <i className="fa-regular fa-calendar-xmark" style={{ fontSize: "1.6rem", display: "block", marginBottom: 10, opacity: .25 }}></i>
+          No appointments for {MONTH_NAMES[month]} {year}.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Calendar navigation bar ─────────────────────────────── */
+function CalNav({ year, month, onMonthNav }) {
+  return (
+    <div className="apptCalNav">
+      <div className="apptCalNavBtns">
+        <button className="apptCalNavBtn" onClick={() => onMonthNav(-1)} aria-label="Previous month">
+          <i className="fa-solid fa-chevron-left"></i>
+        </button>
+        <button className="apptCalNavBtn" onClick={() => onMonthNav(0)}>
+          Today
+        </button>
+        <button className="apptCalNavBtn" onClick={() => onMonthNav(1)} aria-label="Next month">
+          <i className="fa-solid fa-chevron-right"></i>
+        </button>
+      </div>
+      <span className="apptCalNavTitle">{MONTH_NAMES[month]} {year}</span>
+      <span className="apptCalNavNote">
+        <i className="fa-solid fa-circle-info" style={{ marginRight: 4, opacity: .6 }}></i>
+        Shown by submission date
+      </span>
     </div>
   );
 }
