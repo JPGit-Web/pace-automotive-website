@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import PortalLayout from "../../components/portal/PortalLayout";
+import { supabase } from "../../lib/supabase";
 import {
   listHelcimInvoices, getHelcimInvoice,
   updateHelcimInvoice, updateHelcimInvoiceStatus, updateHelcimPaymentStatus,
@@ -77,6 +78,11 @@ export default function PortalInvoices() {
   const [saveError,     setSaveError]     = useState("");
   const [allRos,        setAllRos]        = useState([]);
 
+  /* ── Helcim API creation ── */
+  const [helcimCreating, setHelcimCreating] = useState(false);
+  const [helcimError,    setHelcimError]    = useState("");
+  const [helcimSuccess,  setHelcimSuccess]  = useState("");
+
   /* ── Edit modal ── */
   const [editModal,     setEditModal]     = useState(false);
   const [editForm,      setEditForm]      = useState({});
@@ -102,6 +108,8 @@ export default function PortalInvoices() {
 
   async function openDetailById(id) {
     setDetailLoading(true);
+    setHelcimError("");
+    setHelcimSuccess("");
     try {
       const inv = await getHelcimInvoice(id);
       setSelected(inv);
@@ -259,6 +267,50 @@ export default function PortalInvoices() {
     } catch { setEditError("Failed to save. Please try again."); }
     finally { setEditSaving(false); }
   }
+
+  /* ── Create in Helcim ── */
+  async function handleHelcimCreate() {
+    if (!selected) return;
+    setHelcimCreating(true);
+    setHelcimError("");
+    setHelcimSuccess("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+      const res = await fetch("/.netlify/functions/helcim-create-invoice", {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ invoiceId: selected.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setHelcimError(data.message || "Failed to create Helcim invoice.");
+        return;
+      }
+      setHelcimSuccess(
+        data.helcim_invoice_number
+          ? `Invoice created in Helcim: ${data.helcim_invoice_number}`
+          : "Invoice created in Helcim successfully."
+      );
+      // Refresh detail to show updated Helcim fields
+      await refreshDetail();
+    } catch (err) {
+      if (import.meta.env.DEV) console.error("[handleHelcimCreate]", err);
+      setHelcimError("Failed to reach server. Please try again.");
+    } finally {
+      setHelcimCreating(false);
+    }
+  }
+
+  // Whether this invoice can be created in Helcim
+  const canCreateInHelcim = selected &&
+    !selected.helcim_invoice_id &&
+    (selected.total_cents ?? 0) > 0 &&
+    selected.repair_order_id &&
+    !["voided","cancelled","archived"].includes(selected.status);
 
   function copyLink() {
     if (selected?.helcim_payment_link) {
@@ -555,12 +607,58 @@ export default function PortalInvoices() {
                 </span>
               </div>
 
-              {/* Future Phase placeholder */}
-              <div style={{ marginTop:"10px", paddingTop:"10px", borderTop:"1px solid var(--p-border)", display:"flex", gap:"8px" }}>
-                <button className="portalBtn portalBtnSecondary" disabled title="Sync with Helcim — coming in Phase 9C/9D">
-                  <i className="fa-solid fa-arrows-rotate"></i> Sync with Helcim
-                  <span style={{ fontSize:".7rem", marginLeft:6, opacity:.5 }}>Phase 9C/9D</span>
-                </button>
+              {/* Helcim API creation */}
+              <div style={{ marginTop:"10px", paddingTop:"10px", borderTop:"1px solid var(--p-border)", display:"flex", flexDirection:"column", gap:"8px" }}>
+                <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"center" }}>
+                  {selected.helcim_invoice_id ? (
+                    <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+                      <i className="fa-solid fa-circle-check" style={{ color:"var(--p-success)" }}></i>
+                      <span style={{ fontSize:".83rem", color:"var(--p-text-2)" }}>
+                        Linked to Helcim
+                        {selected.helcim_invoice_number && ` — ${selected.helcim_invoice_number}`}
+                      </span>
+                      {selected.last_synced_at && (
+                        <span style={{ fontSize:".72rem", color:"var(--p-text-3)" }}>
+                          · Last synced {fmtDate(selected.last_synced_at)}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <button className="portalBtn portalBtnPrimary"
+                      onClick={handleHelcimCreate}
+                      disabled={helcimCreating || !canCreateInHelcim}
+                      title={
+                        !selected.repair_order_id ? "Invoice must have a linked repair order" :
+                        (selected.total_cents ?? 0) === 0 ? "Invoice total must be greater than $0" :
+                        !canCreateInHelcim ? "Invoice cannot be created in Helcim in its current state" :
+                        "Create this invoice in Helcim using the API"
+                      }>
+                      <i className={`fa-solid ${helcimCreating ? "fa-spinner fa-spin" : "fa-cloud-arrow-up"}`}></i>
+                      {helcimCreating ? " Creating in Helcim…" : " Create in Helcim"}
+                    </button>
+                  )}
+                  <button className="portalBtn portalBtnSecondary" disabled
+                    title="Webhook payment sync — coming in Phase 9D">
+                    <i className="fa-solid fa-arrows-rotate"></i> Sync
+                    <span style={{ fontSize:".7rem", marginLeft:5, opacity:.5 }}>Phase 9D</span>
+                  </button>
+                </div>
+                {helcimSuccess && (
+                  <div style={{ padding:"8px 12px", background:"var(--p-success-bg)", border:"1px solid #a3d9c2", borderRadius:"6px", fontSize:".82rem", color:"var(--p-success)" }}>
+                    <i className="fa-solid fa-circle-check" style={{ marginRight:6 }}></i>{helcimSuccess}
+                  </div>
+                )}
+                {helcimError && (
+                  <div style={{ padding:"8px 12px", background:"var(--p-danger-bg)", border:"1px solid #f4c0bc", borderRadius:"6px", fontSize:".82rem", color:"var(--p-danger)" }}>
+                    <i className="fa-solid fa-triangle-exclamation" style={{ marginRight:6 }}></i>{helcimError}
+                  </div>
+                )}
+                {selected.sync_error && !helcimError && (
+                  <div style={{ padding:"8px 12px", background:"var(--p-warning-bg)", border:"1px solid #f0d080", borderRadius:"6px", fontSize:".78rem", color:"var(--p-warning)" }}>
+                    <i className="fa-solid fa-triangle-exclamation" style={{ marginRight:6 }}></i>
+                    Last sync error: {selected.sync_error}
+                  </div>
+                )}
               </div>
             </>
           ) : null}

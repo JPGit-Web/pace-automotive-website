@@ -335,10 +335,10 @@ export default function PortalRepairOrders() {
       });
       await logActivity("repair_order.created", "repair_order", ro.id, {
         ro_number: ro.ro_number,
-        customer: fullName(ro.customers),
       });
-      setRos((p) => [ro, ...p]);
+      // Fetch the full list-display row (with customer/vehicle names) then refresh
       closeModal();
+      await load(); // reload the full list so the new RO shows with customer/vehicle
       setSelected(ro);
       setDetailData(await getRepairOrder(ro.id));
     } catch { setSaveError("Failed to create repair order. Please try again."); }

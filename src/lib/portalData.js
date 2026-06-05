@@ -282,13 +282,25 @@ export async function createRepairOrder(roData) {
   const fields = {};
   for (const col of RO_COLUMNS) {
     const val = roData[col];
-    // Normalize empty strings → null; keep numbers/dates as-is
+    // Empty strings → null for nullable fields.
+    // undefined/null → omit from payload so the database DEFAULT takes over.
+    if (val === undefined || val === null) {
+      // Do not include — Postgres will apply the column DEFAULT.
+      continue;
+    }
     if (typeof val === "string" && val.trim() === "") {
+      // Empty string: only omit (use DB default) for the NOT NULL status fields;
+      // for other fields, store null to clear a previously-entered value.
+      if (col === "status" || col === "payment_status") continue;
       fields[col] = null;
     } else {
-      fields[col] = val ?? null;
+      fields[col] = val;
     }
   }
+
+  // Always ensure NOT NULL fields have valid values even if caller omitted them
+  if (!fields.status)         fields.status         = "draft";
+  if (!fields.payment_status) fields.payment_status = "unpaid";
 
   // Set created_by from current session
   try {
@@ -296,14 +308,15 @@ export async function createRepairOrder(roData) {
     if (session?.user?.id) fields.created_by = session.user.id;
   } catch { /* non-fatal */ }
 
+  // Select only scalar columns after insert to avoid PostgREST join ambiguity.
+  // Additional FK relationships added in later migrations (e.g. helcim_invoices)
+  // can make nested joins in a post-insert .select() fail with a 400.
+  // The caller (handleCreate in PortalRepairOrders.jsx) fetches the full
+  // detail separately via getRepairOrder(), so nested joins are not needed here.
   const { data, error } = await supabase
     .from("repair_orders")
     .insert([fields])
-    .select(`
-      id, ro_number, status, payment_status, promised_date, created_at,
-      customers (id, first_name, last_name),
-      vehicles  (id, year, make, model, license_plate)
-    `)
+    .select("id, ro_number, status, payment_status, promised_date, created_at, customer_id, vehicle_id")
     .single();
 
   if (error) {
