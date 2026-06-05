@@ -404,6 +404,10 @@
 .portalBadge.pending    { background: var(--p-warning-bg); color: var(--p-warning); }
 .portalBadge.approved   { background: var(--p-success-bg); color: var(--p-success); }
 .portalBadge.completed  { background: #f0f0f5;             color: #5a6478; }
+.portalBadge.cancelled  { background: #f0f0f4;             color: #4a4a5a; }
+.portalBadge.declined   { background: var(--p-danger-bg);  color: var(--p-danger); }
+.portalBadge.confirmed  { background: var(--p-success-bg); color: var(--p-success); }
+.portalBadge.converted  { background: var(--p-info-bg);    color: var(--p-info); }
 .portalBadge.unpaid     { background: var(--p-danger-bg);  color: var(--p-danger); }
 .portalBadge.draft      { background: #f4f4f6;             color: #888; }
 .portalBadge.waiting    { background: var(--p-warning-bg); color: var(--p-warning); }

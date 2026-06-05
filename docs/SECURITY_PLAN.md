@@ -212,8 +212,10 @@ Set in Netlify dashboard under Site Configuration → Environment Variables. Nev
 | `RESEND_API_KEY` | Email sending — already configured |
 | `BUSINESS_EMAIL` | Recipient for notifications — already configured |
 | `FROM_EMAIL` | Sender address — already configured |
-| `HELCIM_API_KEY` | Future: Helcim API access — server-side only |
-| `HELCIM_WEBHOOK_SECRET` | Future: for verifying Helcim webhook signatures |
+| `HELCIM_API_TOKEN` | Helcim invoice creation API — server-side only |
+| `HELCIM_WEBHOOK_VERIFIER_TOKEN` | Verifies Helcim webhook signatures (Svix HMAC) — server-side only |
+| `HELCIM_API_BASE_URL` | Helcim API base URL (defaults to https://api.helcim.com) |
+| `SITE_URL` | Site origin for generating approval/payment links |
 
 ### Rules
 - `SUPABASE_SERVICE_ROLE_KEY` must only be used in Netlify Functions
@@ -234,15 +236,19 @@ This is a hard rule with no exceptions.
 
 ---
 
-## 8. Webhook Verification (Future — Helcim)
+## 8. Webhook Verification (Implemented — Phase 9D)
 
-When Helcim webhooks are enabled:
+Helcim uses Svix for webhook delivery. The webhook endpoint is `/.netlify/functions/payment-event-sync`.
 
-1. Helcim sends a POST to a Netlify Function endpoint
-2. The function verifies the request signature using `HELCIM_WEBHOOK_SECRET` (HMAC-SHA256)
-3. If signature is invalid: return 401, do not process
-4. If valid: update `invoices.status` and `repair_orders.payment_status` accordingly
-5. Log the event to `activity_logs`
+1. Helcim sends a POST with Svix headers: `webhook-id`, `webhook-timestamp`, `webhook-signature`
+2. The function verifies the HMAC-SHA256 signature using `HELCIM_WEBHOOK_VERIFIER_TOKEN` (base64-decoded key)
+3. Signed content: `{webhook-id}.{webhook-timestamp}.{rawBody}`
+4. Comparison uses `crypto.timingSafeEqual` to prevent timing attacks
+5. If signature is invalid: return 401, do not process
+6. Duplicate events are detected via unique index on `helcim_event_id` — return 200 without reprocessing
+7. Raw payload sanitized before database insert (card data fields removed)
+8. If valid: update `helcim_invoices` and `repair_orders.payment_status` accordingly
+9. Log the event to `helcim_payment_events` and `activity_logs`
 
 Never trust webhook payload data without signature verification.
 
@@ -294,3 +300,50 @@ Logs include `ip_address` for staff actions where available.
 - **Portal login page should not be linked from the public site in V1** — known URL but not advertised
 - **Rate limiting** — Netlify Functions have basic rate limiting; Supabase Auth has built-in brute-force protection
 - **CORS** — Netlify Functions should validate `Origin` header for sensitive endpoints
+
+---
+
+## 12. Phase 11 — Production Readiness Audit (Complete)
+
+Phase 11 confirmed the following security properties:
+
+### Portal Route Protection
+- All `/portal/*` routes are wrapped in `ProtectedRoute`, which checks `supabase.auth.getSession()` and redirects unauthenticated users to `/portal` (login).
+- Session state is synced via `supabase.auth.onAuthStateChange()` to detect server-side revocation.
+- Sign-out calls `supabase.auth.signOut()` and navigates with `replace: true` to prevent back-button bypass.
+- Protected content is not rendered until session check completes (undefined state shows a loading screen).
+
+### Tokenized Approval Links
+- Customer estimate approval links use a raw UUID token in the URL only.
+- The database stores only the SHA-256 hash of the token (`token_hash`), never the raw token.
+- Token validation is server-side only (Netlify Function with service role key).
+- Expired and revoked tokens return 404 / 410 without leaking reason detail.
+- No anon RLS policies exist on `approval_tokens`, `estimates`, or `estimate_items`.
+
+### Server-Only Secrets (Confirmed)
+The following secrets are used only inside Netlify Functions — never in `src/`:
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `HELCIM_API_TOKEN`
+- `HELCIM_WEBHOOK_VERIFIER_TOKEN`
+- `RESEND_API_KEY`
+
+### Webhook Verification (Implemented — Phase 9D)
+- Helcim payment events arrive at `/.netlify/functions/payment-event-sync`.
+- Signature verified using HMAC-SHA256 with `HELCIM_WEBHOOK_VERIFIER_TOKEN` (base64-decoded) before any processing.
+- Timing-safe comparison used (`crypto.timingSafeEqual`).
+- Duplicate events are blocked by unique index on `helcim_event_id`.
+- Raw payload sanitized before database insert — all card data fields removed.
+- URL is neutral (does not contain "helcim") per Helcim delivery URL requirements.
+
+### No Card Data Storage (Confirmed)
+- `helcim_payment_events.raw_payload` is sanitized before insert (removes cardNumber, cardCVV, cardExpiry, bankAccountNumber, paymentToken, and related fields).
+- `helcim_invoices` stores only reference IDs and payment links — no card details.
+- `repair_orders` payment fields store only status and reference (unpaid/partial/paid).
+
+### Server Log Hygiene (Phase 11 Fix)
+- Customer email addresses in server logs are now partially redacted (e.g., `ja***@gmail.com`).
+- No API tokens, service role keys, or raw approval tokens appear in any log.
+
+### Planned for Phase 13
+- Inactivity auto sign-out (10 min idle → warning → sign out)
+- Sign-in password visibility toggle

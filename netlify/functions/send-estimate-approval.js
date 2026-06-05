@@ -234,7 +234,9 @@ export const handler = async (event) => {
       });
     }
 
-    console.log(`[send-estimate-approval] Sent estimate ${estimateId} to ${customerEmail} (token hash stored)`);
+    // Redact email domain — avoid logging full customer email addresses in production
+    const redactedEmail = customerEmail.replace(/(?<=.{2}).+(?=@)/, "***");
+    console.log(`[send-estimate-approval] Sent estimate ${estimateId} to ${redactedEmail} (token hash stored)`);
 
     return {
       statusCode: 200,

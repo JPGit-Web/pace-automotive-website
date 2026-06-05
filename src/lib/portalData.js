@@ -1103,11 +1103,10 @@ export async function getInspectionByRepairOrder(repairOrderId) {
     .from("inspections")
     .select("id, status, completed_at")
     .eq("repair_order_id", repairOrderId)
-    .single();
+    .maybeSingle(); // maybeSingle() returns null cleanly when no rows exist — no PGRST116 error
 
-  if (error && error.code === "PGRST116") return null;
   if (error) throw error;
-  return data;
+  return data ?? null;
 }
 
 /** Create a new inspection for a repair order. */

@@ -655,8 +655,29 @@ cost_cents integer, default_price_cents integer, sort_order integer
 | 6 | Repair orders | ✅ Complete |
 | 7 | Inspections + photos | ✅ Complete |
 | 8 | Estimates + approval links | ✅ Complete |
-| 9 | Helcim invoice (manual) | ⬜ Not started |
-| 10 | Helcim webhook (auto) | ⬜ Not started |
-| 11 | Dashboard + reporting | ⬜ Not started |
+| 9A | Helcim database setup | ✅ Complete |
+| 9B | Manual invoice linking + payment tracking | ✅ Complete |
+| 9C | Helcim API invoice creation | ✅ Complete |
+| 9D | Helcim webhook payment sync | ✅ Built — awaiting live payment test |
+| 10 | Dashboard / shop command centre | ✅ Complete |
+| 11 | Portal polish, security hardening, production readiness | ✅ Complete |
 | 12 | SMS approval links | ⬜ Not started |
 | 13 | Post-MVP workflow improvements | ⬜ Not started |
+
+---
+
+## Phase 9D Live Testing Checklist
+Phase 9D is built and configured. Live verification requires an in-person Helcim terminal payment. Before signing off Phase 9D as fully tested:
+
+- [ ] `HELCIM_WEBHOOK_VERIFIER_TOKEN` added to Netlify environment variables
+- [ ] Webhook delivery URL configured in Helcim dashboard → All Tools → Integrations → Webhooks
+  - URL: `https://powerautomotive.ca/.netlify/functions/payment-event-sync`
+  - Webhook must be active and subscribed to `cardTransaction` events
+- [ ] Create a test Helcim invoice in the portal
+- [ ] Take a small in-person payment via Helcim terminal
+- [ ] Confirm `helcim_payment_events` row inserted in Supabase
+- [ ] Confirm `helcim_invoices.payment_status` updated to `paid` or `partial`
+- [ ] Confirm `repair_orders.payment_status` updated (only to `unpaid`/`partial`/`paid`)
+- [ ] Confirm `activity_logs` entry for `invoice.payment_synced`
+- [ ] Confirm no card numbers, CVV, expiry, or bank details in `raw_payload`
+- [ ] Confirm `helcim_invoices.helcim_customer_id` saved correctly
