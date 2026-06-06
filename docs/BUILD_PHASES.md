@@ -824,6 +824,9 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 | 15B | Sidebar / portal UX cleanup — move Presets to footer Setup section | ✅ Complete |
 | 15C | Owner-ready cleanup / QA — stale label removal, test data cleanup SQL, owner demo checklist, security audit | ✅ Complete |
 | 16A | Appointment calendar — month view with status colours, view toggle (Calendar / List), 60 s auto-refresh | ✅ Complete |
+| docs | Owner & Staff User Manual — 20-section non-technical guide for owners, front desk, and technicians | ✅ Complete |
+| docs | Owner Quick Start Guide — 1–2 page companion reference for daily use alongside the full manual | ✅ Complete |
+| 16C | In-portal Help page — accordion staff reference, daily workflow card, route `/portal/help`, sidebar Setup link | ✅ Complete |
 
 ---
 
@@ -963,6 +966,33 @@ Setup (section label) → Presets (NavLink, active-highlighted) → P.A.C.E. Por
 - [x] All list view behaviour (search, filters, table) unchanged.
 - [x] Add Request modal still works; new request appears on refresh.
 - [x] Convert to RO still works.
+- [x] Build passes.
+
+---
+
+### Phase 16C — In-Portal Help / Instructions Page
+
+**Implemented:**
+- `src/pages/portal/PortalHelp.jsx` — Staff-facing help page with 14 accordion sections (`<details>`/`<summary>`, no JS state) and a daily workflow card at the top.
+  - **Daily Workflow card**: 10-step numbered sequence from "Check Dashboard" to "Close Repair Order".
+  - **Accordion sections**: Dashboard, Customers & Vehicles, Appointments, Repair Orders, Internal RO Printout, Inspections, Estimates, Pricing & Markup, Presets, Customer Approval, Invoices, Printing / Save as PDF, What Not To Do, Troubleshooting.
+  - Pricing & Markup section includes a `helpSafetyNote` callout confirming cost/markup is never customer-visible.
+  - What Not To Do and Troubleshooting sections use tables.
+  - Footer note directs staff to the full written manual (`OWNER_USER_MANUAL.md`).
+  - No secrets, no internal pricing, no Supabase queries — pure static content.
+- `src/components/portal/PortalSidebar.jsx` — Help NavLink added to the footer Setup section (already completed in session).
+- `src/App.jsx` — `import PortalHelp` and `<Route path="/portal/help">` added (already completed in session).
+- `src/styles/portal.css` — New `HELP PAGE` section: `.helpWorkflowCard`, `.helpWorkflowTitle`, `.helpWorkflowList`, `.helpWorkflowItem`, `.helpWorkflowNum`, `.helpAccordion`, `.helpSection`, `.helpSectionBtn`, `.helpSectionIcon`, `.helpChevron`, `.helpSectionBody`, `.helpStatusFlow`, `.helpStatusChip`, `.helpStatusArrow`, `.helpTable`, `.helpBadge` variants, `.helpSafetyNote`, `.helpFooterNote`. Responsive breakpoint at `max-width: 640px`.
+
+**No schema changes. No Netlify function changes. No customer-facing changes.**
+
+**Acceptance criteria:**
+- [x] `/portal/help` loads and is protected (redirects unauthenticated users to login).
+- [x] Help link appears in sidebar footer under Presets with correct active highlight.
+- [x] All 14 accordion sections expand and collapse natively via `<details>`.
+- [x] Daily Workflow card visible at top with 10 numbered steps.
+- [x] Pricing & Markup section shows safety callout confirming internal pricing is never exposed.
+- [x] No internal pricing, secrets, or sensitive data anywhere on the page.
 - [x] Build passes.
 
 ---

@@ -13,6 +13,7 @@ import PortalInspections   from "./pages/portal/PortalInspections";
 import PortalEstimates     from "./pages/portal/PortalEstimates";
 import PortalPresets       from "./pages/portal/PortalPresets";
 import PortalInvoices      from "./pages/portal/PortalInvoices";
+import PortalHelp          from "./pages/portal/PortalHelp";
 
 import ProtectedRoute      from "./components/portal/ProtectedRoute";
 
@@ -45,6 +46,7 @@ export default function App() {
       <Route path="/portal/estimates"     element={protect(PortalEstimates)} />
       <Route path="/portal/presets"       element={protect(PortalPresets)} />
       <Route path="/portal/invoices"      element={protect(PortalInvoices)} />
+      <Route path="/portal/help"          element={protect(PortalHelp)} />
 
       {/* ── Catch-all → public homepage ── */}
       <Route path="*" element={<Navigate to="/" replace />} />

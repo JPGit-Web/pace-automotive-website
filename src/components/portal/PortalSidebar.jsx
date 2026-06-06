@@ -55,6 +55,15 @@ export default function PortalSidebar() {
           </span>
           Presets
         </NavLink>
+        <NavLink
+          to="/portal/help"
+          className={({ isActive }) => isActive ? "portalNavLink active" : "portalNavLink"}
+        >
+          <span className="portalNavIcon" aria-hidden="true">
+            <i className="fa-solid fa-circle-question"></i>
+          </span>
+          Help
+        </NavLink>
         <p className="portalVersionTag">P.A.C.E. Portal</p>
       </div>
     </aside>

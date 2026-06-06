@@ -223,6 +223,17 @@ These are larger than the Phase 13 incremental edits. They touch portal detail U
   - Pure React, no external calendar library. Responsive — compact layout below 640 px.
   - No schema changes.
 
+**Owner & Staff User Manual:**
+- `docs/OWNER_USER_MANUAL.md` created — 20-section non-technical guide written for shop owners, front desk staff, and technicians. Covers every portal page, recommended daily workflow, common scenarios, troubleshooting, what not to do, and a quick reference cheat sheet. Suitable for distribution directly to owners.
+- `docs/OWNER_QUICK_START.md` created — 1–2 page companion quick-start guide covering login, daily workflow table, main pages, RO creation, estimate/invoice flow, presets, safety rules, and quick troubleshooting. Designed to be sent alongside the full manual as an at-a-glance reference.
+
+- ✅ **16C — In-Portal Help / Instructions Page**
+  - `/portal/help` route added; Help link in sidebar footer (Setup section, below Presets).
+  - `src/pages/portal/PortalHelp.jsx` — 14-section accordion staff reference (daily workflow card + Troubleshooting, Pricing & Markup, What Not To Do, and 10 other sections).
+  - Accordion uses native `<details>`/`<summary>` — no JS state required.
+  - Pricing & Markup section includes a safety callout confirming cost/markup is never customer-visible.
+  - Static content only — no Supabase queries, no secrets, no customer-facing changes.
+
 **Phase 16B / future — deferred:**
 - Google Calendar sync — pending owner confirmation.
 - SMS appointment reminders — pending provider decision.
