@@ -827,6 +827,7 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 | docs | Owner & Staff User Manual — 20-section non-technical guide for owners, front desk, and technicians | ✅ Complete |
 | docs | Owner Quick Start Guide — 1–2 page companion reference for daily use alongside the full manual | ✅ Complete |
 | 16C | In-portal Help page — accordion staff reference, daily workflow card, route `/portal/help`, sidebar Setup link | ✅ Complete |
+| 17A | Appointment scheduling workflow — calendar shows only scheduled appointments, request list below, detail modal with scheduling fields, reply email, processing status | ✅ Complete |
 
 ---
 
@@ -993,6 +994,86 @@ Setup (section label) → Presets (NavLink, active-highlighted) → P.A.C.E. Por
 - [x] Daily Workflow card visible at top with 10 numbered steps.
 - [x] Pricing & Markup section shows safety callout confirming internal pricing is never exposed.
 - [x] No internal pricing, secrets, or sensitive data anywhere on the page.
+- [x] Build passes.
+
+---
+
+### Phase 17A — Appointment Scheduling Workflow
+
+**Problem solved:** The Phase 16A calendar placed every appointment request on the calendar by its submission date (`created_at`). Unscheduled web form requests appeared on the calendar on the day they were submitted, which was confusing and useless for scheduling.
+
+**Implemented:**
+
+**Migration `supabase/migrations/013_appointment_scheduling.sql`:**
+- Drops and recreates `appt_status_check` to include `'processing'` (status for replied/handling).
+- Adds columns: `scheduled_start timestamptz`, `scheduled_end timestamptz`, `scheduled_service text`, `reply_message text`, `replied_at timestamptz`, `confirmed_at timestamptz`, `cancelled_at timestamptz`.
+- Partial index `idx_appt_scheduled_start` on `scheduled_start WHERE NOT NULL`.
+- No new RLS policies needed (existing authenticated-staff policies cover new columns).
+
+**`src/lib/portalData.js`:**
+- `APPT_COLUMNS` extended with new scheduling/reply columns.
+- `updateAppointmentRequestStatus` now sets `confirmed_at` and `cancelled_at` automatically when transitioning to those statuses.
+- `saveAppointmentSchedule(id, { scheduledStart, scheduledEnd, scheduledService })` — saves scheduling fields only, no status change. Calling this makes the appointment appear on the calendar.
+- `confirmAppointmentRequest(id, { scheduledStart, scheduledEnd, scheduledService })` — sets `status = 'confirmed'`, `confirmed_at`, and all scheduling fields in one DB call.
+- `sendAppointmentReply(appointmentId, replyMessage)` — calls `/.netlify/functions/send-appointment-reply` with the staff access token.
+
+**`netlify/functions/send-appointment-reply.js`:**
+- Verifies staff JWT (same pattern as `send-estimate-approval.js`).
+- Fetches the appointment from DB via service role.
+- If no email: returns `{ code: 'NO_EMAIL' }` — no email is sent, no error thrown.
+- Builds HTML email with P.A.C.E. branding, staff reply message, and scheduled date/time if available.
+- Sends via Resend to the customer's email.
+- Patches `appointment_requests`: sets `reply_message`, `replied_at`; promotes status `pending → processing`.
+- DB patch failure after a successful send is logged but not surfaced to the caller.
+- Contact info: `admin@powerautomotive.ca`, `(587) 579-2695`, `powerautomotive.ca`.
+- No secrets in `src/`.
+
+**`src/pages/portal/PortalAppointments.jsx` (complete rewrite):**
+- **Calendar** now only renders requests where `scheduled_start IS NOT NULL AND status != 'cancelled'`. Events are placed by local date of `scheduled_start` (not `created_at`). Calendar nav note updated to "Confirmed & scheduled appointments only". Calendar events show time + name + service.
+- **Request list section** added below calendar (always visible in calendar view; also shown alone in list view). Columns: Received, Name, Phone, Email, Vehicle, Service, Preferred Time, Source, Status. A calendar-check icon on rows that have a `scheduled_start`. Clicking a row opens the detail modal.
+- **Detail modal** replaces the old bottom detail panel. Sections:
+  1. Request Information — contact, vehicle, service, preferred time, received date, notes.
+  2. Schedule Appointment — Date / Start Time / End Time inputs + scheduled service field. "Save Scheduling Details" (no status change) and "Confirm Appointment" (requires date + time; sets confirmed). Currently-scheduled banner if already scheduled.
+  3. Reply to Customer — textarea + "Send Reply" button. If no email: phone-reply notice. Tracks `replied_at`.
+  4. Change Status — Pending / Processing / Confirmed / Cancelled buttons.
+- Modal footer: Convert to RO (hidden if already converted), Close.
+- Convert to RO modal unchanged (same customer/vehicle/mileage/concern flow).
+- Add Request modal unchanged (same phone/walk-in form).
+- View toggle (Calendar / List) preserved.
+- 60-second auto-refresh unchanged.
+
+**`src/styles/portal.css`:**
+- `.apptCalEvent.status-processing` (orange) — new status colour.
+- `.apptCalEventTime` — bold time prefix on calendar event chips.
+- `.apptReqSection`, `.apptReqSectionHeader`, `.apptReqSectionTitle`, `.apptReqCount` — request list section header styles.
+- `.apptModalSectionLabel`, `.apptModalDivider`, `.apptInfoGrid` — detail modal section headings and layout.
+- `.apptSchedConfirmed` — green "currently scheduled" banner inside the modal scheduling section.
+- `.apptSchedForm` — scheduling form layout.
+- `.apptNoEmail` — amber notice when no customer email is on file.
+- `.apptStatusRow` — status buttons row in modal.
+- `.portalBadge.processing` — orange badge in the request list table.
+
+**Deferred to 17B / future:**
+- Google Calendar sync.
+- SMS reply / confirmation.
+- Week / day calendar views.
+- `scheduled_date DATE` column (separate column for calendar-only placement without a specific time).
+- Drag-to-reschedule.
+- Paginating the request list.
+
+**Acceptance criteria:**
+- [x] Calendar shows only requests with `scheduled_start` set and `status != cancelled`.
+- [x] Unscheduled web form requests do NOT appear on the calendar.
+- [x] Request list visible below calendar (calendar view) and as full view (list view).
+- [x] Clicking a request opens a centered modal.
+- [x] Save Scheduling Details saves date/time without changing status.
+- [x] Confirm Appointment requires date + time; sets status = confirmed and makes event appear on calendar.
+- [x] Send Reply emails the customer; shows phone-reply message if no email on file.
+- [x] Status changes (Pending / Processing / Confirmed / Cancelled) work from modal.
+- [x] Convert to RO still works.
+- [x] Add Request modal still works.
+- [x] No secrets in `src/`.
+- [x] No `.delete()` calls.
 - [x] Build passes.
 
 ---

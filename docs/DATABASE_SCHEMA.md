@@ -117,10 +117,26 @@ Captures requests from both the public web form and manually entered phone/walk-
 | `service_requested` | text | Service category or description |
 | `preferred_date` | text | Free text from customer ("Thursday morning") |
 | `notes` | text | Additional customer notes |
-| `status` | text | Enum: `'pending'`, `'confirmed'`, `'cancelled'`, `'converted'` |
+| `status` | text | Enum: `'pending'`, `'processing'`, `'confirmed'`, `'cancelled'`, `'converted'` |
 | `repair_order_id` | uuid | FK → `repair_orders(id)`. Set when converted to RO |
+| `scheduled_start` | timestamptz | Null until staff schedules. Controls calendar placement. |
+| `scheduled_end` | timestamptz | Optional end time. UI defaults to +1 h if blank. |
+| `scheduled_service` | text | Work to be performed at the scheduled time. |
+| `reply_message` | text | Latest staff reply message sent to the customer. |
+| `replied_at` | timestamptz | When the most recent staff reply was sent. |
+| `confirmed_at` | timestamptz | When status was set to `confirmed`. |
+| `cancelled_at` | timestamptz | When status was set to `cancelled`. |
 | `created_at` | timestamptz | Auto |
 | `updated_at` | timestamptz | Auto via trigger |
+
+**Status values:**
+- `pending` — new/unactioned request
+- `processing` — staff has replied or is actively handling (Phase 17A)
+- `confirmed` — appointment confirmed (requires `scheduled_start` for calendar display)
+- `cancelled` — cancelled; hidden from active lists
+- `converted` — converted to a repair order; `repair_order_id` is set
+
+**Calendar rule:** Only rows where `scheduled_start IS NOT NULL AND status != 'cancelled'` appear on the appointment calendar. Unscheduled requests stay in the request list until staff assigns a date/time.
 
 **Relationships:**
 - Optionally linked to `customers` and `vehicles`
@@ -498,6 +514,26 @@ RLS: authenticated staff only. No anon policy. No DELETE policy.
 | `estimate_job_id` | uuid | Nullable. FK → `estimate_jobs(id)` on delete set null. `null` = ungrouped. |
 
 **Security:** `estimate_jobs.notes` is excluded from `get-approval-estimate.js`. Only `id`, `title`, and `sort_order` are returned to customers. `cost_cents`, `markup_percent`, and `customer_unit_price_cents` remain staff-only.
+
+---
+
+## Phase 17A — ✅ Implemented: `appointment_requests` scheduling columns
+
+Migration: `supabase/migrations/013_appointment_scheduling.sql`
+
+| Column | Type | Notes |
+|---|---|---|
+| `scheduled_start` | timestamptz | Null until staff schedules. Calendar only shows rows where this is set. |
+| `scheduled_end` | timestamptz | Optional. UI defaults to +1 h display if blank. |
+| `scheduled_service` | text | Work to be done at the appointment. |
+| `reply_message` | text | Latest staff reply sent to the customer. |
+| `replied_at` | timestamptz | When the last reply was sent. |
+| `confirmed_at` | timestamptz | Set when status transitions to `confirmed`. |
+| `cancelled_at` | timestamptz | Set when status transitions to `cancelled`. |
+
+`status` check constraint updated to include `'processing'` (staff has replied / is actively handling).
+
+**RLS:** Existing authenticated-staff SELECT / INSERT / UPDATE policies cover all new columns. No new policies. Public (anon) role remains revoked.
 
 ---
 

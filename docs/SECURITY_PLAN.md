@@ -460,3 +460,52 @@ The four customer-facing Netlify Functions use explicit column allowlists. The n
 ### Rule
 
 Any future column added to `estimate_items` that is internal/staff-only must be verified absent from all four customer-facing function `select:` lists before deploying. Never use `select: *` in these functions.
+
+---
+
+## 16. Phase 17A — Appointment Reply Email Security Notes (Complete)
+
+### New Netlify Function: `send-appointment-reply.js`
+
+Allows staff to email a reply to a customer about their appointment request.
+
+**Staff authentication:**
+- Requires `Authorization: Bearer <staff-jwt>` header.
+- Verified via Supabase Auth `/auth/v1/user` endpoint using the service role key.
+- Unauthenticated requests return `401`.
+
+**Data accessed (service role, server-side only):**
+- `appointment_requests` row — columns: `id, name, email, phone, vehicle_info, service_requested, preferred_date, notes, status, scheduled_start, scheduled_service`.
+- No pricing columns. No estimate data. No payment data. No Helcim data.
+
+**Email content (customer-facing):**
+- Customer name, their requested service/vehicle (from the request form), scheduled time if set, and staff reply message.
+- No internal notes, cost/markup, or staff identity.
+- Reply-to: `admin@powerautomotive.ca`.
+
+**DB write after send:**
+- Updates `reply_message`, `replied_at`, and promotes status `pending → processing` if applicable.
+- DB patch failure after a successful email send is logged but does not surface a 500 to the portal (email already sent).
+
+**No-email guard:**
+- If `appointment_requests.email` is null/empty, returns `{ statusCode: 400, code: 'NO_EMAIL' }` — no email is attempted, no DB write, no crash.
+- Portal displays "No customer email on this request. Please reply by phone."
+
+**Secrets:**
+- `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — Netlify Function env vars only, never in `src/`.
+
+### Scheduling Columns — No Customer-Facing Exposure
+
+New scheduling columns added by migration 013 (`scheduled_start`, `scheduled_end`, `scheduled_service`, `reply_message`, `replied_at`, `confirmed_at`, `cancelled_at`) are staff-portal-only fields on `appointment_requests`.
+
+- Not accessed by any customer-facing Netlify Function.
+- The public web form `send-inquiry.js` inserts a fixed column subset and is unaffected by new columns.
+- RLS on `appointment_requests` blocks anon access — table remains staff-only.
+
+### Google Calendar Sync — Deliberately Deferred
+
+No OAuth tokens, Google API keys, or Google Calendar credentials are present in this codebase.
+
+### SMS — Deliberately Deferred
+
+No SMS provider keys or Twilio credentials are present in this codebase.

@@ -1559,6 +1559,9 @@ const APPT_COLUMNS = [
   "source", "name", "phone", "email",
   "vehicle_info", "service_requested", "preferred_date", "notes",
   "status", "customer_id", "vehicle_id", "repair_order_id",
+  // Scheduling fields (Phase 17A):
+  "scheduled_start", "scheduled_end", "scheduled_service",
+  "reply_message", "replied_at", "confirmed_at", "cancelled_at",
 ];
 
 /** Fetch all appointment requests ordered newest first. */
@@ -1633,11 +1636,18 @@ export async function updateAppointmentRequest(id, apptData) {
   return data;
 }
 
-/** Change only the status field on an appointment request. */
+/** Change only the status field on an appointment request.
+ *  Automatically sets confirmed_at or cancelled_at when transitioning
+ *  to those terminal states. */
 export async function updateAppointmentRequestStatus(id, status) {
+  const fields = { status };
+  const now = new Date().toISOString();
+  if (status === "confirmed") fields.confirmed_at = now;
+  if (status === "cancelled") fields.cancelled_at = now;
+
   const { data, error } = await supabase
     .from("appointment_requests")
-    .update({ status })
+    .update(fields)
     .eq("id", id)
     .select()
     .single();
@@ -1647,6 +1657,76 @@ export async function updateAppointmentRequestStatus(id, status) {
     throw error;
   }
   return data;
+}
+
+/** Save scheduling date/time fields without changing status.
+ *  Calling this makes the appointment appear on the calendar. */
+export async function saveAppointmentSchedule(id, { scheduledStart, scheduledEnd, scheduledService }) {
+  const { data, error } = await supabase
+    .from("appointment_requests")
+    .update({
+      scheduled_start:   scheduledStart   || null,
+      scheduled_end:     scheduledEnd     || null,
+      scheduled_service: scheduledService || null,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    if (import.meta.env.DEV) console.error("[saveAppointmentSchedule] Supabase error:", error);
+    throw error;
+  }
+  return data;
+}
+
+/** Confirm an appointment: set status=confirmed, confirmed_at, and scheduling fields in one call. */
+export async function confirmAppointmentRequest(id, { scheduledStart, scheduledEnd, scheduledService }) {
+  const { data, error } = await supabase
+    .from("appointment_requests")
+    .update({
+      status:            "confirmed",
+      confirmed_at:      new Date().toISOString(),
+      scheduled_start:   scheduledStart   || null,
+      scheduled_end:     scheduledEnd     || null,
+      scheduled_service: scheduledService || null,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    if (import.meta.env.DEV) console.error("[confirmAppointmentRequest] Supabase error:", error);
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Call the send-appointment-reply Netlify Function to email a reply to the
+ * customer. The function also saves reply_message + replied_at on the row.
+ *
+ * Returns { sent: true } on success.
+ * Returns { noEmail: true } when the appointment has no email address.
+ * Throws on any other error.
+ */
+export async function sendAppointmentReply(appointmentId, replyMessage) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Not authenticated");
+
+  const res = await fetch("/.netlify/functions/send-appointment-reply", {
+    method: "POST",
+    headers: {
+      "Content-Type":  "application/json",
+      "Authorization": `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ appointmentId, replyMessage }),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (res.status === 400 && json.code === "NO_EMAIL") return { noEmail: true };
+  if (!res.ok) throw new Error(json.message || "Failed to send reply");
+  return { sent: true };
 }
 
 /**

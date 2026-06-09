@@ -3300,6 +3300,12 @@
   color: #15803d;
 }
 
+.apptCalEvent.status-processing {
+  background: #fff7ed;
+  border-left-color: #f97316;
+  color: #9a3412;
+}
+
 .apptCalEvent.status-cancelled {
   background: #f3f4f6;
   border-left-color: #9ca3af;
@@ -3310,6 +3316,11 @@
 
 .apptCalEventSub {
   opacity: .7;
+}
+
+.apptCalEventTime {
+  font-weight: 700;
+  opacity: .85;
 }
 
 /* Overflow "+N more" */
@@ -3575,4 +3586,129 @@
   .helpWorkflowItem { font-size: .78rem; padding: 5px 9px; }
   .helpSectionBody { padding-left: 18px; }
   .helpTable { font-size: .76rem; }
+}
+
+/* ============================================================
+   APPOINTMENTS — Phase 17A additions
+   (calendar status + request list section + detail modal)
+   ============================================================ */
+
+/* Request list section below calendar */
+.apptReqSection {
+  margin-top: 20px;
+}
+
+.apptReqSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.apptReqSectionTitle {
+  font-size: .88rem;
+  font-weight: 700;
+  color: var(--p-text-1);
+  letter-spacing: .01em;
+}
+
+.apptReqSectionTitle i {
+  margin-right: 6px;
+  color: var(--p-navy);
+  opacity: .8;
+}
+
+.apptReqCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--p-navy);
+  color: #fff;
+  font-size: .68rem;
+  font-weight: 700;
+  padding: 0 6px;
+  margin-left: 6px;
+}
+
+/* Detail modal sections */
+.apptModalSectionLabel {
+  font-size: .78rem;
+  font-weight: 700;
+  color: var(--p-text-3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin: 0 0 10px;
+}
+
+.apptModalSectionLabel i {
+  margin-right: 5px;
+  opacity: .7;
+}
+
+.apptModalDivider {
+  border: none;
+  border-top: 1px solid var(--p-border);
+  margin: 18px 0;
+}
+
+.apptInfoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px 20px;
+}
+
+/* Currently scheduled banner inside modal */
+.apptSchedConfirmed {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: .82rem;
+  color: #15803d;
+  margin-bottom: 12px;
+}
+
+.apptSchedForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* No-email notice */
+.apptNoEmail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: .84rem;
+  color: #92400e;
+}
+
+.apptNoEmail i { flex-shrink: 0; }
+
+/* Status row inside modal */
+.apptStatusRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Badge for processing status in tables */
+.portalBadge.processing {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
 }

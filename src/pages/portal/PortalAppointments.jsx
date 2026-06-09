@@ -5,6 +5,9 @@ import {
   listAppointmentRequests,
   createAppointmentRequest,
   updateAppointmentRequestStatus,
+  saveAppointmentSchedule,
+  confirmAppointmentRequest,
+  sendAppointmentReply,
   convertAppointmentToRepairOrder,
   listCustomers,
   listVehiclesByCustomer,
@@ -18,14 +21,15 @@ const SERVICES = [
   "General Repair", "Other",
 ];
 
-const STATUS_FILTERS = ["all", "pending", "confirmed", "cancelled", "converted"];
-
 const STATUS_LABELS = {
-  pending:   "Pending",
-  confirmed: "Confirmed",
-  cancelled: "Cancelled",
-  converted: "Converted",
+  pending:    "Pending",
+  processing: "Processing",
+  confirmed:  "Confirmed",
+  cancelled:  "Cancelled",
+  converted:  "Converted",
 };
+
+const STATUS_FILTERS = ["all", "pending", "processing", "confirmed", "cancelled", "converted"];
 
 const SOURCE_LABELS = {
   web_form: "Web Form",
@@ -39,14 +43,15 @@ const MONTH_NAMES = [
 ];
 
 const EMPTY_FORM = {
-  source:            "phone",
-  name:              "",
-  phone:             "",
-  email:             "",
-  vehicle_info:      "",
-  service_requested: "",
-  preferred_date:    "",
-  notes:             "",
+  source: "phone", name: "", phone: "", email: "",
+  vehicle_info: "", service_requested: "", preferred_date: "", notes: "",
+};
+
+const EMPTY_SCHED = { date: "", time: "", endTime: "", service: "" };
+
+const EMPTY_CONVERT = {
+  customer_id: "", vehicle_id: "", mileage_in: "",
+  promised_date: "", customer_concern: "", internal_notes: "",
 };
 
 /* ── Helpers ────────────────────────────────────────────────── */
@@ -65,61 +70,110 @@ function fmtDateTime(iso) {
   });
 }
 
-function sourceClass(source) {
-  return source === "web_form" ? "web-form" : source?.replace("_", "-") ?? "";
+function fmtTime(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" });
 }
 
-function validateForm(d) {
+function sourceClass(source) {
+  return source === "web_form" ? "web-form" : (source?.replace("_", "-") ?? "");
+}
+
+function validateAddForm(d) {
   const e = {};
   if (!d.name?.trim())  e.name  = "Name is required.";
   if (!d.phone?.trim()) e.phone = "Phone is required.";
   return e;
 }
 
-const EMPTY_CONVERT = {
-  customer_id: "", vehicle_id: "", mileage_in: "",
-  promised_date: "", customer_concern: "", internal_notes: "",
-};
+/* Convert local date + time strings to ISO timestamptz string */
+function buildTimestamp(date, time) {
+  if (!date) return null;
+  const t = time || "00:00";
+  return new Date(`${date}T${t}`).toISOString();
+}
+
+/* Pre-fill schedule form from an existing appointment */
+function schedFromAppt(r) {
+  if (!r?.scheduled_start) {
+    return { date: "", time: "", endTime: "", service: r?.service_requested || "" };
+  }
+  const s = new Date(r.scheduled_start);
+  const e = r.scheduled_end ? new Date(r.scheduled_end) : null;
+  return {
+    date:    `${s.getFullYear()}-${String(s.getMonth()+1).padStart(2,"0")}-${String(s.getDate()).padStart(2,"0")}`,
+    time:    `${String(s.getHours()).padStart(2,"0")}:${String(s.getMinutes()).padStart(2,"0")}`,
+    endTime: e ? `${String(e.getHours()).padStart(2,"0")}:${String(e.getMinutes()).padStart(2,"0")}` : "",
+    service: r.scheduled_service || r.service_requested || "",
+  };
+}
 
 /* ============================================================ */
 export default function PortalAppointments() {
   const navigate = useNavigate();
 
-  /* ── State ── */
+  /* ── Core data ── */
   const [requests,      setRequests]      = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState(null);
-  const [search,        setSearch]        = useState("");
-  const [statusFilter,  setStatusFilter]  = useState("all");
-  const [selected,      setSelected]      = useState(null);
-  const [changingStatus,setChangingStatus]= useState(false);
-  const [modal,         setModal]         = useState(false);
-  const [formData,      setFormData]      = useState({ ...EMPTY_FORM });
-  const [formErrors,    setFormErrors]    = useState({});
-  const [saving,        setSaving]        = useState(false);
-  const [saveError,     setSaveError]     = useState("");
-  // Convert-to-RO modal state
-  const [convertModal,    setConvertModal]    = useState(false);
-  const [convertForm,     setConvertForm]     = useState({ ...EMPTY_CONVERT });
-  const [convertErrors,   setConvertErrors]   = useState({});
-  const [converting,      setConverting]      = useState(false);
-  const [convertError,    setConvertError]    = useState("");
-  const [convertCustomers,setConvertCustomers]= useState([]);
-  const [convertVehicles, setConvertVehicles] = useState([]);
-  const [custLoadingConv, setCustLoadingConv] = useState(false);
-  // Calendar state
+
+  /* ── View ── */
   const [view,     setView]     = useState("calendar");
   const [calMonth, setCalMonth] = useState(() => {
     const t = new Date();
     return new Date(t.getFullYear(), t.getMonth(), 1);
   });
 
+  /* ── Request list filter ── */
+  const [search,       setSearch]       = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  /* ── Detail modal ── */
+  const [detailRequest, setDetailRequest] = useState(null);
+
+  /* ── Reply ── */
+  const [replyText,   setReplyText]   = useState("");
+  const [replying,    setReplying]    = useState(false);
+  const [replyResult, setReplyResult] = useState(null); // null | {ok} | {err}
+
+  /* ── Scheduling ── */
+  const [schedForm,   setSchedForm]   = useState({ ...EMPTY_SCHED });
+  const [scheduling,  setScheduling]  = useState(false);
+  const [schedError,  setSchedError]  = useState("");
+  const [schedSaved,  setSchedSaved]  = useState(false);
+
+  /* ── Status change ── */
+  const [changingStatus, setChangingStatus] = useState(false);
+
+  /* ── Add Request modal ── */
+  const [addModal,    setAddModal]    = useState(false);
+  const [formData,    setFormData]    = useState({ ...EMPTY_FORM });
+  const [formErrors,  setFormErrors]  = useState({});
+  const [saving,      setSaving]      = useState(false);
+  const [saveError,   setSaveError]   = useState("");
+
+  /* ── Convert to RO modal ── */
+  const [convertModal,     setConvertModal]     = useState(false);
+  const [convertForm,      setConvertForm]      = useState({ ...EMPTY_CONVERT });
+  const [convertErrors,    setConvertErrors]    = useState({});
+  const [converting,       setConverting]       = useState(false);
+  const [convertError,     setConvertError]     = useState("");
+  const [convertCustomers, setConvertCustomers] = useState([]);
+  const [convertVehicles,  setConvertVehicles]  = useState([]);
+  const [custLoadingConv,  setCustLoadingConv]  = useState(false);
+
   /* ── Load ── */
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setRequests(await listAppointmentRequests());
+      const data = await listAppointmentRequests();
+      setRequests(data);
+      // Keep detail modal in sync if it's open
+      setDetailRequest((prev) => {
+        if (!prev) return null;
+        return data.find((r) => r.id === prev.id) ?? prev;
+      });
     } catch {
       setError("Failed to load appointment requests. Please try again.");
     } finally {
@@ -129,16 +183,20 @@ export default function PortalAppointments() {
 
   useEffect(() => { load(); }, [load]);
 
-  /* Auto-refresh every 60 seconds while the page is open */
   useEffect(() => {
     const id = setInterval(load, 60_000);
     return () => clearInterval(id);
   }, [load]);
 
-  /* ── Filter ── */
+  /* ── Derived ── */
+  // Calendar: only requests with a scheduled date (not cancelled)
+  const scheduledRequests = requests.filter(
+    (r) => r.scheduled_start && r.status !== "cancelled"
+  );
+
+  // Request list: filtered by search + status tab
   const filtered = requests.filter((r) => {
-    const matchesStatus = statusFilter === "all" || r.status === statusFilter;
-    if (!matchesStatus) return false;
+    if (statusFilter !== "all" && r.status !== statusFilter) return false;
     if (!search.trim()) return true;
     const t = search.toLowerCase();
     return (
@@ -150,38 +208,55 @@ export default function PortalAppointments() {
     );
   });
 
-  /* ── Status counts for filter tabs ── */
   const counts = requests.reduce((acc, r) => {
     acc[r.status] = (acc[r.status] || 0) + 1;
     return acc;
   }, {});
 
-  /* ── Calendar month navigation ── */
+  /* ── Calendar nav ── */
   function handleMonthNav(dir) {
     if (dir === 0) {
       const t = new Date();
       setCalMonth(new Date(t.getFullYear(), t.getMonth(), 1));
     } else {
-      setCalMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + dir, 1));
+      setCalMonth((p) => new Date(p.getFullYear(), p.getMonth() + dir, 1));
     }
   }
 
-  /* ── Row/event click ── */
-  function selectRequest(r) {
-    setSelected((prev) => (prev?.id === r.id ? null : r));
+  /* ── Shared state updater ── */
+  function applyUpdate(updated) {
+    setRequests((p) => p.map((r) => (r.id === updated.id ? updated : r)));
+    setDetailRequest((p) => (p?.id === updated.id ? updated : p));
+  }
+
+  /* ── Detail modal ── */
+  function openDetail(r) {
+    setDetailRequest(r);
+    setReplyText("");
+    setReplyResult(null);
+    setSchedError("");
+    setSchedSaved(false);
+    setSchedForm(schedFromAppt(r));
+  }
+
+  function closeDetail() {
+    setDetailRequest(null);
+    setReplyText("");
+    setReplyResult(null);
+    setSchedError("");
+    setSchedSaved(false);
   }
 
   /* ── Status change ── */
   async function handleStatusChange(newStatus) {
-    if (!selected || selected.status === newStatus) return;
+    if (!detailRequest || detailRequest.status === newStatus) return;
     setChangingStatus(true);
     try {
-      const updated = await updateAppointmentRequestStatus(selected.id, newStatus);
-      await logActivity("appointment.status_changed", "appointment_request", selected.id, {
-        name: selected.name, from: selected.status, to: newStatus,
+      const updated = await updateAppointmentRequestStatus(detailRequest.id, newStatus);
+      await logActivity("appointment.status_changed", "appointment_request", detailRequest.id, {
+        name: detailRequest.name, from: detailRequest.status, to: newStatus,
       });
-      setRequests((p) => p.map((r) => (r.id === updated.id ? updated : r)));
-      setSelected(updated);
+      applyUpdate(updated);
     } catch {
       alert("Failed to update status. Please try again.");
     } finally {
@@ -189,32 +264,105 @@ export default function PortalAppointments() {
     }
   }
 
-  /* ── Modal ── */
-  function openModal() {
+  /* ── Save scheduling details ── */
+  async function handleScheduleSave() {
+    if (!schedForm.date) { setSchedError("Appointment date is required."); return; }
+    setScheduling(true);
+    setSchedError("");
+    setSchedSaved(false);
+    try {
+      const scheduledStart   = buildTimestamp(schedForm.date, schedForm.time || "08:00");
+      const scheduledEnd     = schedForm.endTime ? buildTimestamp(schedForm.date, schedForm.endTime) : null;
+      const scheduledService = schedForm.service?.trim() || null;
+      const updated = await saveAppointmentSchedule(detailRequest.id, {
+        scheduledStart, scheduledEnd, scheduledService,
+      });
+      applyUpdate(updated);
+      setSchedSaved(true);
+      setTimeout(() => setSchedSaved(false), 3000);
+    } catch {
+      setSchedError("Failed to save scheduling details. Please try again.");
+    } finally {
+      setScheduling(false);
+    }
+  }
+
+  /* ── Confirm appointment ── */
+  async function handleConfirm() {
+    if (!schedForm.date || !schedForm.time) {
+      setSchedError("Date and start time are required to confirm.");
+      return;
+    }
+    setScheduling(true);
+    setSchedError("");
+    try {
+      const scheduledStart   = buildTimestamp(schedForm.date, schedForm.time);
+      const scheduledEnd     = schedForm.endTime ? buildTimestamp(schedForm.date, schedForm.endTime) : null;
+      const scheduledService = schedForm.service?.trim() || null;
+      const updated = await confirmAppointmentRequest(detailRequest.id, {
+        scheduledStart, scheduledEnd, scheduledService,
+      });
+      await logActivity("appointment.confirmed", "appointment_request", detailRequest.id, {
+        name: detailRequest.name, scheduled_start: scheduledStart,
+      });
+      applyUpdate(updated);
+    } catch {
+      setSchedError("Failed to confirm appointment. Please try again.");
+    } finally {
+      setScheduling(false);
+    }
+  }
+
+  /* ── Send reply ── */
+  async function handleSendReply() {
+    if (!replyText.trim()) return;
+    setReplying(true);
+    setReplyResult(null);
+    try {
+      const result = await sendAppointmentReply(detailRequest.id, replyText.trim());
+      if (result.noEmail) {
+        setReplyResult({ err: "No customer email on this request. Please reply by phone." });
+        return;
+      }
+      // Refresh the row so replied_at + status update are reflected
+      const data = await listAppointmentRequests();
+      setRequests(data);
+      const updated = data.find((r) => r.id === detailRequest.id);
+      if (updated) setDetailRequest(updated);
+      setReplyText("");
+      setReplyResult({ ok: true });
+      await logActivity("appointment.replied", "appointment_request", detailRequest.id, {
+        name: detailRequest.name,
+      });
+    } catch (err) {
+      setReplyResult({ err: err.message || "Failed to send reply. Please try again." });
+    } finally {
+      setReplying(false);
+    }
+  }
+
+  /* ── Add Request modal ── */
+  function openAddModal() {
     setFormData({ ...EMPTY_FORM });
     setFormErrors({});
     setSaveError("");
-    setModal(true);
+    setAddModal(true);
   }
-
-  function closeModal() {
-    setModal(false);
+  function closeAddModal() {
+    setAddModal(false);
     setFormData({ ...EMPTY_FORM });
     setFormErrors({});
     setSaveError("");
   }
-
   function handleField(e) {
     const { name, value } = e.target;
     setFormData((p) => ({ ...p, [name]: value }));
     if (formErrors[name]) setFormErrors((p) => ({ ...p, [name]: "" }));
   }
-
   async function handleSave(e) {
     e.preventDefault();
-    const errors = validateForm(formData);
+    const errors = validateAddForm(formData);
     if (Object.keys(errors).length) { setFormErrors(errors); return; }
-
     setSaving(true);
     setSaveError("");
     try {
@@ -223,8 +371,8 @@ export default function PortalAppointments() {
         name: created.name, source: created.source,
       });
       setRequests((p) => [created, ...p]);
-      closeModal();
-      setSelected(created);
+      closeAddModal();
+      openDetail(created);
     } catch {
       setSaveError("Failed to save appointment request. Please try again.");
     } finally {
@@ -234,8 +382,8 @@ export default function PortalAppointments() {
 
   /* ── Convert to RO modal ── */
   async function openConvertModal() {
-    if (!selected) return;
-    const concern = [selected.service_requested, selected.notes].filter(Boolean).join(" — ");
+    if (!detailRequest) return;
+    const concern = [detailRequest.service_requested, detailRequest.notes].filter(Boolean).join(" — ");
     setConvertForm({ ...EMPTY_CONVERT, customer_concern: concern });
     setConvertErrors({});
     setConvertError("");
@@ -246,7 +394,6 @@ export default function PortalAppointments() {
     catch { setConvertCustomers([]); }
     finally { setCustLoadingConv(false); }
   }
-
   function closeConvertModal() {
     setConvertModal(false);
     setConvertForm({ ...EMPTY_CONVERT });
@@ -254,13 +401,11 @@ export default function PortalAppointments() {
     setConvertError("");
     setConvertVehicles([]);
   }
-
   function handleConvertField(e) {
     const { name, value } = e.target;
     setConvertForm((p) => ({ ...p, [name]: value }));
     if (convertErrors[name]) setConvertErrors((p) => ({ ...p, [name]: "" }));
   }
-
   async function handleConvertCustomer(e) {
     const id = e.target.value;
     setConvertForm((p) => ({ ...p, customer_id: id, vehicle_id: "" }));
@@ -269,18 +414,16 @@ export default function PortalAppointments() {
     try { setConvertVehicles(await listVehiclesByCustomer(id)); }
     catch { setConvertVehicles([]); }
   }
-
   async function handleConvertSubmit(e) {
     e.preventDefault();
     const errors = {};
     if (!convertForm.customer_id) errors.customer_id = "Customer is required.";
     if (!convertForm.vehicle_id)  errors.vehicle_id  = "Vehicle is required.";
     if (Object.keys(errors).length) { setConvertErrors(errors); return; }
-
     setConverting(true);
     setConvertError("");
     try {
-      const ro = await convertAppointmentToRepairOrder(selected.id, {
+      const ro = await convertAppointmentToRepairOrder(detailRequest.id, {
         customerId:      convertForm.customer_id,
         vehicleId:       convertForm.vehicle_id,
         mileageIn:       convertForm.mileage_in    || null,
@@ -291,12 +434,11 @@ export default function PortalAppointments() {
       await logActivity("repair_order.created", "repair_order", ro.id, {
         ro_number: ro.ro_number, source: "appointment_conversion",
       });
-      await logActivity("appointment.converted_to_repair_order", "appointment_request", selected.id, {
-        ro_number: ro.ro_number, appointment_name: selected.name,
+      await logActivity("appointment.converted_to_repair_order", "appointment_request", detailRequest.id, {
+        ro_number: ro.ro_number, appointment_name: detailRequest.name,
       });
-      const updatedAppt = { ...selected, status: "converted", repair_order_id: ro.id };
-      setRequests((p) => p.map((r) => r.id === selected.id ? updatedAppt : r));
-      setSelected(updatedAppt);
+      const updatedAppt = { ...detailRequest, status: "converted", repair_order_id: ro.id };
+      applyUpdate(updatedAppt);
       closeConvertModal();
       navigate("/portal/repair-orders");
     } catch {
@@ -309,16 +451,16 @@ export default function PortalAppointments() {
   /* ── Render ── */
   return (
     <PortalLayout title="Appointments">
+
       {/* Page header */}
       <div className="portalPageHeader">
         <div>
-          <h2 className="portalPageHeading">Appointment Requests</h2>
+          <h2 className="portalPageHeading">Appointments</h2>
           <p className="portalPageDesc">
-            Web form submissions and manually entered phone/walk-in requests.
+            Scheduled appointments and incoming requests.
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          {/* View toggle */}
           <div className="apptViewToggle">
             <button
               className={`apptViewBtn${view === "calendar" ? " active" : ""}`}
@@ -333,107 +475,101 @@ export default function PortalAppointments() {
               <i className="fa-solid fa-list"></i> List
             </button>
           </div>
-          <button className="portalBtn portalBtnPrimary" onClick={openModal}>
+          <button className="portalBtn portalBtnPrimary" onClick={openAddModal}>
             <i className="fa-solid fa-plus"></i> Add Request
           </button>
         </div>
       </div>
 
-      {/* Calendar view */}
+      {/* ── Calendar (calendar-view only) ── */}
       {view === "calendar" && (
         <AppCalendar
-          requests={requests}
+          scheduledRequests={scheduledRequests}
           calMonth={calMonth}
           onMonthNav={handleMonthNav}
-          onSelect={selectRequest}
-          selected={selected}
+          onSelect={openDetail}
+          selected={detailRequest}
           loading={loading}
           error={error}
           onRetry={load}
         />
       )}
 
-      {/* List view: toolbar + table */}
-      {view === "list" && (
-        <>
-          {/* Toolbar: search + status filters */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px" }}>
-            <div className="portalToolbar" style={{ marginBottom: 0 }}>
-              <div className="portalSearchBar">
-                <i className="fa-solid fa-magnifying-glass"></i>
-                <input
-                  className="portalSearchInput"
-                  placeholder="Search by name, phone, email, vehicle, or service…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-              {filtered.length > 0 && (
-                <span style={{ fontSize: ".82rem", color: "var(--p-text-3)" }}>
-                  {filtered.length} result{filtered.length !== 1 ? "s" : ""}
-                </span>
-              )}
-            </div>
-
-            <div className="portalFilterTabs">
-              {STATUS_FILTERS.map((s) => (
-                <button
-                  key={s}
-                  className={`portalFilterTab${statusFilter === s ? " active" : ""}`}
-                  onClick={() => setStatusFilter(s)}
-                >
-                  {s === "all" ? "All" : STATUS_LABELS[s]}
-                  {s !== "all" && counts[s] ? (
-                    <span style={{ marginLeft: 6, fontSize: ".72rem", opacity: .75 }}>
-                      {counts[s]}
-                    </span>
-                  ) : null}
-                  {s === "all" && (
-                    <span style={{ marginLeft: 6, fontSize: ".72rem", opacity: .75 }}>
-                      {requests.length}
-                    </span>
-                  )}
-                </button>
-              ))}
+      {/* ── Request list (both views) ── */}
+      <div className="apptReqSection">
+        <div className="apptReqSectionHeader">
+          <div>
+            <span className="apptReqSectionTitle">
+              <i className="fa-solid fa-inbox"></i> Incoming Requests
+            </span>
+            <span className="apptReqCount">{requests.length}</span>
+          </div>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <div className="portalSearchBar" style={{ minWidth: "220px" }}>
+              <i className="fa-solid fa-magnifying-glass"></i>
+              <input
+                className="portalSearchInput"
+                placeholder="Search name, phone, email…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
             </div>
           </div>
+        </div>
 
-          {/* Main table */}
-          <div className="portalCard" style={{ padding: 0, overflow: "hidden" }}>
-            {loading ? (
-              <div className="portalEmptyState">
-                <p style={{ color: "var(--p-text-3)" }}>Loading appointment requests…</p>
+        {/* Status filter tabs */}
+        <div className="portalFilterTabs" style={{ padding: "0 0 8px" }}>
+          {STATUS_FILTERS.map((s) => (
+            <button
+              key={s}
+              className={`portalFilterTab${statusFilter === s ? " active" : ""}`}
+              onClick={() => setStatusFilter(s)}
+            >
+              {s === "all" ? "All" : STATUS_LABELS[s]}
+              <span style={{ marginLeft: 5, fontSize: ".72rem", opacity: .75 }}>
+                {s === "all" ? requests.length : (counts[s] || 0)}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Table / states */}
+        <div className="portalCard" style={{ padding: 0, overflow: "hidden" }}>
+          {loading ? (
+            <div className="portalEmptyState">
+              <p style={{ color: "var(--p-text-3)" }}>Loading requests…</p>
+            </div>
+          ) : error ? (
+            <div className="portalEmptyState">
+              <div className="portalEmptyIcon">⚠️</div>
+              <p className="portalEmptyTitle">Could not load requests</p>
+              <p className="portalEmptyDesc">{error}</p>
+              <button className="portalBtn portalBtnSecondary" onClick={load}>Try Again</button>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="portalEmptyState">
+              <div className="portalEmptyIcon">
+                <i className="fa-solid fa-calendar-days" style={{ opacity: .25 }}></i>
               </div>
-            ) : error ? (
-              <div className="portalEmptyState">
-                <div className="portalEmptyIcon">⚠️</div>
-                <p className="portalEmptyTitle">Could not load requests</p>
-                <p className="portalEmptyDesc">{error}</p>
-                <button className="portalBtn portalBtnSecondary" onClick={load}>Try Again</button>
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="portalEmptyState">
-                <div className="portalEmptyIcon">
-                  <i className="fa-solid fa-calendar-days" style={{ opacity: .25 }}></i>
-                </div>
-                <p className="portalEmptyTitle">
-                  {search || statusFilter !== "all"
-                    ? "No requests match your filters"
-                    : "No appointment requests yet"}
-                </p>
-                <p className="portalEmptyDesc">
-                  {search || statusFilter !== "all"
-                    ? "Try clearing the search or changing the status filter."
-                    : "Requests submitted through the public booking form will appear here automatically."}
-                </p>
-              </div>
-            ) : (
+              <p className="portalEmptyTitle">
+                {search || statusFilter !== "all" ? "No requests match your filters" : "No appointment requests yet"}
+              </p>
+              <p className="portalEmptyDesc">
+                {search || statusFilter !== "all"
+                  ? "Try clearing the search or changing the status filter."
+                  : "Requests from the public booking form will appear here automatically."}
+              </p>
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
               <table className="portalTable">
                 <thead>
                   <tr>
-                    <th>Date</th>
+                    <th>Received</th>
                     <th>Name</th>
                     <th>Phone</th>
+                    <th>Email</th>
+                    <th>Vehicle</th>
                     <th>Service</th>
                     <th>Preferred Time</th>
                     <th>Source</th>
@@ -444,17 +580,23 @@ export default function PortalAppointments() {
                   {filtered.map((r) => (
                     <tr
                       key={r.id}
-                      onClick={() => selectRequest(r)}
+                      onClick={() => openDetail(r)}
                       style={{
                         cursor: "pointer",
-                        background: selected?.id === r.id ? "rgba(11,27,58,.04)" : undefined,
+                        background: detailRequest?.id === r.id ? "rgba(11,27,58,.04)" : undefined,
                       }}
                     >
                       <td style={{ fontSize: ".83rem", color: "var(--p-text-2)", whiteSpace: "nowrap" }}>
                         {fmtDate(r.created_at)}
                       </td>
                       <td style={{ fontWeight: 600, color: "var(--p-navy)" }}>{r.name}</td>
-                      <td style={{ fontSize: ".88rem", color: "var(--p-text-2)" }}>{r.phone}</td>
+                      <td style={{ fontSize: ".88rem", color: "var(--p-text-2)" }}>{r.phone || "—"}</td>
+                      <td style={{ fontSize: ".83rem", color: "var(--p-text-2)" }}>
+                        {r.email || <span style={{ color: "var(--p-text-3)" }}>—</span>}
+                      </td>
+                      <td style={{ fontSize: ".83rem", color: "var(--p-text-2)" }}>
+                        {r.vehicle_info || <span style={{ color: "var(--p-text-3)" }}>—</span>}
+                      </td>
                       <td style={{ fontSize: ".85rem", color: "var(--p-text-2)" }}>
                         {r.service_requested || <span style={{ color: "var(--p-text-3)" }}>—</span>}
                       </td>
@@ -467,140 +609,309 @@ export default function PortalAppointments() {
                         </span>
                       </td>
                       <td>
-                        <span className={`portalBadge ${r.status}`}>
-                          {STATUS_LABELS[r.status] ?? r.status}
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                          <span className={`portalBadge ${r.status}`}>
+                            {STATUS_LABELS[r.status] ?? r.status}
+                          </span>
+                          {r.scheduled_start && (
+                            <span
+                              title={`Scheduled: ${fmtDateTime(r.scheduled_start)}`}
+                              style={{ fontSize: ".7rem", color: "var(--p-text-3)" }}
+                            >
+                              <i className="fa-solid fa-calendar-check"></i>
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Detail panel — shared between calendar and list views */}
-      {selected && (
-        <div className="portalApptDetail">
-          <div className="portalApptDetailHeader">
-            <div>
-              <h3 className="portalApptDetailName">{selected.name}</h3>
-              <div className="portalApptDetailMeta">
-                <span className={`portalBadge ${selected.status}`}>
-                  {STATUS_LABELS[selected.status] ?? selected.status}
-                </span>
-                <span className={`portalBadge ${sourceClass(selected.source)}`}>
-                  {SOURCE_LABELS[selected.source] ?? selected.source}
-                </span>
-                <span style={{ fontSize: ".78rem", color: "var(--p-text-3)" }}>
-                  Received {fmtDateTime(selected.created_at)}
-                </span>
-              </div>
-            </div>
-            <button
-              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--p-text-3)", fontSize: ".82rem", fontFamily: "inherit" }}
-              onClick={() => setSelected(null)}
-            >
-              ✕ Close
-            </button>
-          </div>
-
-          {/* Info grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "12px 24px" }}>
-            <DetailField label="Phone"      value={selected.phone} />
-            <DetailField label="Email"      value={selected.email} />
-            <DetailField label="Vehicle"    value={selected.vehicle_info} />
-            <DetailField label="Service"    value={selected.service_requested} />
-            <DetailField label="Preferred Time" value={selected.preferred_date} />
-          </div>
-
-          {selected.notes && (
-            <div style={{ marginTop: "12px" }}>
-              <div className="portalDetailLabel">Message / Additional Details</div>
-              <div className="portalDetailValue" style={{ marginTop: "4px", whiteSpace: "pre-wrap", lineHeight: "1.6" }}>
-                {selected.notes}
-              </div>
             </div>
           )}
-
-          {/* Status actions */}
-          <div className="portalApptStatusActions">
-            <span className="label">Change Status:</span>
-            {["pending", "confirmed", "cancelled"].map((s) => (
-              <button
-                key={s}
-                className={`portalBtnStatus${selected.status === s ? " active" : ""}`}
-                onClick={() => handleStatusChange(s)}
-                disabled={changingStatus || selected.status === s}
-              >
-                {STATUS_LABELS[s]}
-              </button>
-            ))}
-            <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
-              {selected.status === "converted" ? (
-                <span className="portalConvertedBadge">
-                  <i className="fa-solid fa-check"></i>
-                  Converted{selected.repair_order_id ? " → RO created" : ""}
-                </span>
-              ) : (
-                <button
-                  className="portalBtnStatus"
-                  onClick={openConvertModal}
-                  disabled={changingStatus}
-                  title="Convert this appointment into a repair order"
-                >
-                  <i className="fa-solid fa-arrow-right-to-bracket"></i> Convert to RO
-                </button>
-              )}
-            </span>
-          </div>
         </div>
-      )}
+      </div>
 
-      {/* Add Request modal */}
-      {modal && (
+      {/* ── Detail Modal ── */}
+      {detailRequest && (
         <div
           className="portalModalOverlay"
-          onClick={(e) => e.target === e.currentTarget && closeModal()}
+          onClick={(e) => e.target === e.currentTarget && closeDetail()}
         >
-          <div className="portalModalCard" role="dialog" aria-modal="true" aria-label="Add Appointment Request">
+          <div
+            className="portalModalCard portalModalLg"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Appointment Request Detail"
+          >
+            {/* Header */}
             <div className="portalModalHeader">
-              <h2 className="portalModalTitle">Add Appointment Request</h2>
-              <button className="portalModalClose" onClick={closeModal} aria-label="Close">
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                <h2 className="portalModalTitle" style={{ margin: 0 }}>{detailRequest.name}</h2>
+                <span className={`portalBadge ${detailRequest.status}`}>
+                  {STATUS_LABELS[detailRequest.status] ?? detailRequest.status}
+                </span>
+                <span className={`portalBadge ${sourceClass(detailRequest.source)}`}>
+                  {SOURCE_LABELS[detailRequest.source] ?? detailRequest.source}
+                </span>
+              </div>
+              <button className="portalModalClose" onClick={closeDetail} aria-label="Close">
                 <i className="fa-solid fa-xmark"></i>
               </button>
             </div>
 
+            <div className="portalModalBody">
+
+              {/* ── 1. Request Information ── */}
+              <p className="apptModalSectionLabel">
+                <i className="fa-solid fa-address-card"></i> Request Information
+              </p>
+              <div className="apptInfoGrid">
+                <InfoField label="Phone"    value={detailRequest.phone} />
+                <InfoField label="Email"    value={detailRequest.email} />
+                <InfoField label="Vehicle"  value={detailRequest.vehicle_info} />
+                <InfoField label="Service"  value={detailRequest.service_requested} />
+                <InfoField label="Preferred Time" value={detailRequest.preferred_date} />
+                <InfoField label="Received" value={fmtDateTime(detailRequest.created_at)} />
+              </div>
+              {detailRequest.notes && (
+                <div style={{ marginTop: "12px" }}>
+                  <div className="portalDetailLabel">Message / Additional Details</div>
+                  <div className="portalDetailValue" style={{ marginTop: "4px", whiteSpace: "pre-wrap", lineHeight: "1.6" }}>
+                    {detailRequest.notes}
+                  </div>
+                </div>
+              )}
+
+              <hr className="apptModalDivider" />
+
+              {/* ── 2. Schedule ── */}
+              <p className="apptModalSectionLabel">
+                <i className="fa-solid fa-calendar-check"></i> Schedule Appointment
+              </p>
+
+              {detailRequest.scheduled_start && (
+                <div className="apptSchedConfirmed">
+                  <i className="fa-solid fa-clock" style={{ marginRight: 6, opacity: .7 }}></i>
+                  Currently scheduled: <strong>{fmtDateTime(detailRequest.scheduled_start)}</strong>
+                  {detailRequest.scheduled_end && (
+                    <> — {fmtTime(detailRequest.scheduled_end)}</>
+                  )}
+                  {detailRequest.scheduled_service && (
+                    <span style={{ marginLeft: 8, opacity: .75 }}>· {detailRequest.scheduled_service}</span>
+                  )}
+                </div>
+              )}
+
+              <div className="apptSchedForm">
+                <div className="portalFormRow" style={{ gap: "10px" }}>
+                  <div className="portalFormField">
+                    <label className="portalFormLabel">Date</label>
+                    <input
+                      type="date"
+                      className="portalFormInput"
+                      value={schedForm.date}
+                      onChange={(e) => setSchedForm((p) => ({ ...p, date: e.target.value }))}
+                    />
+                  </div>
+                  <div className="portalFormField">
+                    <label className="portalFormLabel">Start Time</label>
+                    <input
+                      type="time"
+                      className="portalFormInput"
+                      value={schedForm.time}
+                      onChange={(e) => setSchedForm((p) => ({ ...p, time: e.target.value }))}
+                    />
+                  </div>
+                  <div className="portalFormField">
+                    <label className="portalFormLabel">End Time <span style={{ opacity:.55 }}>(opt.)</span></label>
+                    <input
+                      type="time"
+                      className="portalFormInput"
+                      value={schedForm.endTime}
+                      onChange={(e) => setSchedForm((p) => ({ ...p, endTime: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="portalFormField">
+                  <label className="portalFormLabel">Work / Service Scheduled</label>
+                  <input
+                    type="text"
+                    className="portalFormInput"
+                    placeholder="e.g. Brake inspection and front pad replacement"
+                    value={schedForm.service}
+                    onChange={(e) => setSchedForm((p) => ({ ...p, service: e.target.value }))}
+                  />
+                </div>
+
+                {schedError && (
+                  <p style={{ color: "var(--p-red)", fontSize: ".82rem", margin: "4px 0 0" }}>{schedError}</p>
+                )}
+
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginTop: "8px" }}>
+                  <button
+                    className="portalBtn portalBtnSecondary"
+                    onClick={handleScheduleSave}
+                    disabled={scheduling || !schedForm.date}
+                  >
+                    {scheduling ? "Saving…" : "Save Scheduling Details"}
+                  </button>
+                  <button
+                    className="portalBtn portalBtnPrimary"
+                    onClick={handleConfirm}
+                    disabled={scheduling || !schedForm.date || !schedForm.time || detailRequest.status === "converted"}
+                    title={!schedForm.date || !schedForm.time ? "Date and start time are required to confirm" : ""}
+                  >
+                    <i className="fa-solid fa-circle-check"></i>{" "}
+                    {detailRequest.status === "confirmed" ? "Re-Confirm" : "Confirm Appointment"}
+                  </button>
+                  {schedSaved && (
+                    <span style={{ fontSize: ".8rem", color: "var(--p-green)", fontWeight: 600 }}>
+                      <i className="fa-solid fa-check"></i> Saved
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <hr className="apptModalDivider" />
+
+              {/* ── 3. Reply to Customer ── */}
+              <p className="apptModalSectionLabel">
+                <i className="fa-solid fa-reply"></i> Reply to Customer
+              </p>
+
+              {!detailRequest.email?.trim() ? (
+                <div className="apptNoEmail">
+                  <i className="fa-solid fa-phone"></i>
+                  No customer email on this request. Please reply by phone:&nbsp;
+                  <strong>{detailRequest.phone}</strong>
+                </div>
+              ) : (
+                <>
+                  {detailRequest.replied_at && (
+                    <p style={{ fontSize: ".8rem", color: "var(--p-text-3)", margin: "0 0 8px" }}>
+                      <i className="fa-solid fa-clock" style={{ marginRight: 4 }}></i>
+                      Last reply sent: {fmtDateTime(detailRequest.replied_at)}
+                    </p>
+                  )}
+                  <textarea
+                    className="portalFormTextarea"
+                    rows={4}
+                    placeholder={`Write a reply to ${detailRequest.name}…`}
+                    value={replyText}
+                    onChange={(e) => { setReplyText(e.target.value); setReplyResult(null); }}
+                    style={{ width: "100%", boxSizing: "border-box" }}
+                  />
+                  {replyResult?.ok && (
+                    <p style={{ color: "var(--p-green)", fontSize: ".82rem", margin: "6px 0 0", fontWeight: 600 }}>
+                      <i className="fa-solid fa-check"></i> Reply sent to {detailRequest.email}
+                    </p>
+                  )}
+                  {replyResult?.err && (
+                    <p style={{ color: "var(--p-red)", fontSize: ".82rem", margin: "6px 0 0" }}>
+                      {replyResult.err}
+                    </p>
+                  )}
+                  <div style={{ marginTop: "8px" }}>
+                    <button
+                      className="portalBtn portalBtnPrimary"
+                      onClick={handleSendReply}
+                      disabled={replying || !replyText.trim()}
+                    >
+                      <i className="fa-solid fa-paper-plane"></i>{" "}
+                      {replying ? "Sending…" : "Send Reply"}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              <hr className="apptModalDivider" />
+
+              {/* ── 4. Change Status ── */}
+              <p className="apptModalSectionLabel">
+                <i className="fa-solid fa-arrows-rotate"></i> Change Status
+              </p>
+              <div className="apptStatusRow">
+                {["pending", "processing", "confirmed", "cancelled"].map((s) => (
+                  <button
+                    key={s}
+                    className={`portalBtnStatus${detailRequest.status === s ? " active" : ""}`}
+                    onClick={() => handleStatusChange(s)}
+                    disabled={changingStatus || detailRequest.status === s || detailRequest.status === "converted"}
+                  >
+                    {STATUS_LABELS[s]}
+                  </button>
+                ))}
+              </div>
+              {detailRequest.confirmed_at && (
+                <p style={{ fontSize: ".78rem", color: "var(--p-text-3)", margin: "6px 0 0" }}>
+                  Confirmed: {fmtDateTime(detailRequest.confirmed_at)}
+                </p>
+              )}
+              {detailRequest.cancelled_at && (
+                <p style={{ fontSize: ".78rem", color: "var(--p-text-3)", margin: "6px 0 0" }}>
+                  Cancelled: {fmtDateTime(detailRequest.cancelled_at)}
+                </p>
+              )}
+
+            </div>{/* end modalBody */}
+
+            {/* Modal footer */}
+            <div className="portalModalFooter">
+              {detailRequest.status === "converted" ? (
+                <span className="portalConvertedBadge">
+                  <i className="fa-solid fa-check"></i>
+                  Converted{detailRequest.repair_order_id ? " → RO created" : ""}
+                </span>
+              ) : (
+                <button
+                  className="portalBtn portalBtnPrimary"
+                  onClick={openConvertModal}
+                  disabled={changingStatus}
+                >
+                  <i className="fa-solid fa-arrow-right-to-bracket"></i> Convert to RO
+                </button>
+              )}
+              <button className="portalBtn portalBtnSecondary" onClick={closeDetail}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Request Modal ── */}
+      {addModal && (
+        <div
+          className="portalModalOverlay"
+          onClick={(e) => e.target === e.currentTarget && closeAddModal()}
+        >
+          <div className="portalModalCard" role="dialog" aria-modal="true" aria-label="Add Appointment Request">
+            <div className="portalModalHeader">
+              <h2 className="portalModalTitle">Add Appointment Request</h2>
+              <button className="portalModalClose" onClick={closeAddModal} aria-label="Close">
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
             <form onSubmit={handleSave} noValidate>
               <div className="portalModalBody">
                 {saveError && <div className="portalModalError">{saveError}</div>}
-
                 <div className="portalForm">
-                  {/* Source */}
                   <div className="portalFormField">
                     <label className="portalFormLabel">Source</label>
-                    <select
-                      className="portalFormSelect"
-                      name="source"
-                      value={formData.source}
-                      onChange={handleField}
-                    >
+                    <select className="portalFormSelect" name="source" value={formData.source} onChange={handleField}>
                       <option value="phone">Phone</option>
                       <option value="walk_in">Walk-in</option>
                     </select>
                   </div>
-
                   <div className="portalFormRow">
                     <ApptField label="Name" name="name" required
                       error={formErrors.name} value={formData.name} onChange={handleField} />
                     <ApptField label="Phone" name="phone" type="tel" required
                       error={formErrors.phone} value={formData.phone} onChange={handleField} />
                   </div>
-
                   <ApptField label="Email" name="email" type="email"
                     value={formData.email} onChange={handleField} />
-
                   <div className="portalFormRow">
                     <ApptField label="Vehicle (Year / Make / Model)" name="vehicle_info"
                       placeholder="e.g. 2019 Honda Civic"
@@ -614,30 +925,20 @@ export default function PortalAppointments() {
                       </select>
                     </div>
                   </div>
-
                   <ApptField label="Preferred Date / Time" name="preferred_date"
                     placeholder="e.g. Wednesday morning, any weekday after 2pm"
                     value={formData.preferred_date} onChange={handleField} />
-
                   <div className="portalFormField">
                     <label className="portalFormLabel">Notes</label>
-                    <textarea
-                      className="portalFormTextarea"
-                      name="notes"
-                      rows={3}
+                    <textarea className="portalFormTextarea" name="notes" rows={3}
                       placeholder="Customer concerns, symptoms, or anything else to note…"
-                      value={formData.notes}
-                      onChange={handleField}
-                    />
+                      value={formData.notes} onChange={handleField} />
                   </div>
                 </div>
               </div>
-
               <div className="portalModalFooter">
                 <button type="button" className="portalBtn portalBtnSecondary"
-                  onClick={closeModal} disabled={saving}>
-                  Cancel
-                </button>
+                  onClick={closeAddModal} disabled={saving}>Cancel</button>
                 <button type="submit" className="portalBtn portalBtnPrimary" disabled={saving}>
                   {saving ? "Saving…" : "Save Request"}
                 </button>
@@ -647,27 +948,31 @@ export default function PortalAppointments() {
         </div>
       )}
 
-      {/* Convert to RO Modal */}
-      {convertModal && selected && (
-        <div className="portalModalOverlay" onClick={(e) => e.target === e.currentTarget && closeConvertModal()}>
-          <div className="portalModalCard" style={{ maxWidth:"540px" }} role="dialog" aria-modal="true" aria-label="Convert to Repair Order">
+      {/* ── Convert to RO Modal ── */}
+      {convertModal && detailRequest && (
+        <div
+          className="portalModalOverlay"
+          onClick={(e) => e.target === e.currentTarget && closeConvertModal()}
+        >
+          <div className="portalModalCard" style={{ maxWidth: "540px" }}
+            role="dialog" aria-modal="true" aria-label="Convert to Repair Order">
             <div className="portalModalHeader">
               <h2 className="portalModalTitle">Convert to Repair Order</h2>
-              <button className="portalModalClose" onClick={closeConvertModal}><i className="fa-solid fa-xmark"></i></button>
+              <button className="portalModalClose" onClick={closeConvertModal}>
+                <i className="fa-solid fa-xmark"></i>
+              </button>
             </div>
             <form onSubmit={handleConvertSubmit} noValidate>
               <div className="portalModalBody">
                 {convertError && <div className="portalModalError">{convertError}</div>}
-
-                {/* Appointment summary */}
                 <div style={{ padding:"12px 14px", background:"var(--p-bg)", border:"1px solid var(--p-border)", borderRadius:"var(--p-radius-sm)", marginBottom:"18px", fontSize:".85rem" }}>
-                  <strong>{selected.name}</strong> — {selected.phone}
-                  {selected.service_requested && <> &nbsp;|&nbsp; {selected.service_requested}</>}
-                  {selected.preferred_date && <div style={{ color:"var(--p-text-2)", marginTop:"2px" }}>Preferred: {selected.preferred_date}</div>}
+                  <strong>{detailRequest.name}</strong> — {detailRequest.phone}
+                  {detailRequest.service_requested && <> &nbsp;|&nbsp; {detailRequest.service_requested}</>}
+                  {detailRequest.preferred_date && (
+                    <div style={{ color:"var(--p-text-2)", marginTop:"2px" }}>Preferred: {detailRequest.preferred_date}</div>
+                  )}
                 </div>
-
                 <div className="portalForm">
-                  {/* Customer selector */}
                   <div className="portalFormField">
                     <label className="portalFormLabel">Customer<span className="req">*</span></label>
                     {custLoadingConv ? (
@@ -683,19 +988,17 @@ export default function PortalAppointments() {
                     )}
                     {convertErrors.customer_id && <p className="portalFormFieldError">{convertErrors.customer_id}</p>}
                     <p style={{ fontSize:".75rem", color:"var(--p-text-3)", margin:"4px 0 0" }}>
-                      Customer not listed? <a href="/portal/customers" style={{ color:"var(--p-navy)", fontWeight:600 }}>Create them in Customers first.</a>
+                      Not listed? <a href="/portal/customers" style={{ color:"var(--p-navy)", fontWeight:600 }}>Create in Customers first.</a>
                     </p>
                   </div>
-
-                  {/* Vehicle selector */}
                   <div className="portalFormField">
                     <label className="portalFormLabel">Vehicle<span className="req">*</span></label>
                     {!convertForm.customer_id ? (
-                      <p className="portalSelectorNote">Select a customer first to load their vehicles.</p>
+                      <p className="portalSelectorNote">Select a customer first.</p>
                     ) : convertVehicles.length === 0 ? (
                       <p className="portalSelectorNote">
-                        No vehicles on file for this customer.
-                        <a href="/portal/customers" style={{ color:"var(--p-navy)", marginLeft:6, fontWeight:600 }}>Add one from the Customers page.</a>
+                        No vehicles on file.
+                        <a href="/portal/customers" style={{ color:"var(--p-navy)", marginLeft:6, fontWeight:600 }}>Add one from Customers.</a>
                       </p>
                     ) : (
                       <select className={`portalFormSelect${convertErrors.vehicle_id ? " invalid" : ""}`}
@@ -708,38 +1011,34 @@ export default function PortalAppointments() {
                     )}
                     {convertErrors.vehicle_id && <p className="portalFormFieldError">{convertErrors.vehicle_id}</p>}
                   </div>
-
                   <div className="portalFormRow">
                     <div className="portalFormField">
-                      <label className="portalFormLabel" htmlFor="conv-mileage">Mileage In (km)</label>
-                      <input id="conv-mileage" className="portalFormInput" type="number" name="mileage_in"
+                      <label className="portalFormLabel">Mileage In (km)</label>
+                      <input className="portalFormInput" type="number" name="mileage_in"
                         placeholder="e.g. 87500" value={convertForm.mileage_in} onChange={handleConvertField} />
                     </div>
                     <div className="portalFormField">
-                      <label className="portalFormLabel" htmlFor="conv-date">Promised Date</label>
-                      <input id="conv-date" className="portalFormInput" type="date" name="promised_date"
+                      <label className="portalFormLabel">Promised Date</label>
+                      <input className="portalFormInput" type="date" name="promised_date"
                         value={convertForm.promised_date} onChange={handleConvertField} />
                     </div>
                   </div>
-
                   <div className="portalFormField">
                     <label className="portalFormLabel">Customer Concern</label>
                     <textarea className="portalFormTextarea" name="customer_concern" rows={2}
-                      placeholder="Pre-filled from appointment — edit as needed"
                       value={convertForm.customer_concern} onChange={handleConvertField} />
                   </div>
                   <div className="portalFormField">
                     <label className="portalFormLabel">Internal Notes</label>
                     <textarea className="portalFormTextarea" name="internal_notes" rows={2}
-                      placeholder="Staff-only notes for the repair order…"
+                      placeholder="Staff-only notes…"
                       value={convertForm.internal_notes} onChange={handleConvertField} />
                   </div>
                 </div>
               </div>
               <div className="portalModalFooter">
-                <button type="button" className="portalBtn portalBtnSecondary" onClick={closeConvertModal} disabled={converting}>
-                  Cancel
-                </button>
+                <button type="button" className="portalBtn portalBtnSecondary"
+                  onClick={closeConvertModal} disabled={converting}>Cancel</button>
                 <button type="submit" className="portalBtn portalBtnPrimary"
                   disabled={converting || !convertForm.customer_id || !convertForm.vehicle_id}>
                   {converting ? "Converting…" : "Create Repair Order"}
@@ -749,11 +1048,12 @@ export default function PortalAppointments() {
           </div>
         </div>
       )}
+
     </PortalLayout>
   );
 }
 
-/* ── Small reusable field for the modal ── */
+/* ── Small reusable field for Add Request modal ── */
 function ApptField({ label, name, type = "text", required, error, value, onChange, placeholder }) {
   return (
     <div className="portalFormField">
@@ -775,8 +1075,8 @@ function ApptField({ label, name, type = "text", required, error, value, onChang
   );
 }
 
-/* ── Detail field ── */
-function DetailField({ label, value }) {
+/* ── Info field for detail modal ── */
+function InfoField({ label, value }) {
   return (
     <div>
       <div className="portalDetailLabel">{label}</div>
@@ -787,84 +1087,76 @@ function DetailField({ label, value }) {
   );
 }
 
-/* ── Month calendar component ─────────────────────────────── */
-function AppCalendar({ requests, calMonth, onMonthNav, onSelect, selected, loading, error, onRetry }) {
+/* ── Month calendar (shows only scheduled appointments) ─────── */
+function AppCalendar({ scheduledRequests, calMonth, onMonthNav, onSelect, selected, loading, error, onRetry }) {
   const year  = calMonth.getFullYear();
   const month = calMonth.getMonth();
 
   const now      = new Date();
   const todayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
 
-  /* Group requests by submission date (created_at) */
+  /* Group requests by LOCAL date of scheduled_start */
   const byDate = {};
-  requests.forEach((r) => {
-    const d   = new Date(r.created_at);
+  scheduledRequests.forEach((r) => {
+    const d   = new Date(r.scheduled_start);
     const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
     if (!byDate[key]) byDate[key] = [];
     byDate[key].push(r);
   });
 
-  /* Build 7-column grid cells */
-  const firstDow     = new Date(year, month, 1).getDay();     // 0=Sun
-  const daysInMonth  = new Date(year, month + 1, 0).getDate();
-  const daysInPrev   = new Date(year, month, 0).getDate();
-  const prevYear     = month === 0 ? year - 1 : year;
-  const prevMonth    = month === 0 ? 11 : month - 1;
-  const nextYear     = month === 11 ? year + 1 : year;
-  const nextMonth    = month === 11 ? 0 : month + 1;
+  /* Build 7-column grid */
+  const firstDow   = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrev  = new Date(year, month, 0).getDate();
+  const prevYear    = month === 0 ? year - 1 : year;
+  const prevMonth   = month === 0 ? 11 : month - 1;
+  const nextYear    = month === 11 ? year + 1 : year;
+  const nextMonth   = month === 11 ? 0 : month + 1;
 
   const cells = [];
   for (let i = firstDow - 1; i >= 0; i--)
-    cells.push({ day: daysInPrev - i, y: prevYear,  m: prevMonth, other: true });
+    cells.push({ day: daysInPrev - i, y: prevYear,  m: prevMonth,  other: true });
   for (let d = 1; d <= daysInMonth; d++)
     cells.push({ day: d, y: year, m: month, other: false });
   let nd = 1;
   while (cells.length % 7 !== 0)
     cells.push({ day: nd++, y: nextYear, m: nextMonth, other: true });
 
-  const hasThisMonth = requests.some((r) => {
-    const d = new Date(r.created_at);
+  const hasThisMonth = scheduledRequests.some((r) => {
+    const d = new Date(r.scheduled_start);
     return d.getFullYear() === year && d.getMonth() === month;
   });
 
   const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-  if (loading) {
-    return (
-      <div className="apptCal">
-        <CalNav year={year} month={month} onMonthNav={onMonthNav} />
-        <div className="apptCalEmpty">
-          <p style={{ color: "var(--p-text-3)" }}>Loading appointments…</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="apptCal">
+      <CalNav year={year} month={month} onMonthNav={onMonthNav} />
+      <div className="apptCalEmpty"><p style={{ color: "var(--p-text-3)" }}>Loading…</p></div>
+    </div>
+  );
 
-  if (error) {
-    return (
-      <div className="apptCal">
-        <CalNav year={year} month={month} onMonthNav={onMonthNav} />
-        <div className="apptCalEmpty">
-          <div style={{ fontSize: "1.4rem", marginBottom: 8 }}>⚠️</div>
-          <p style={{ fontWeight: 600, marginBottom: 6 }}>Could not load appointments</p>
-          <button className="portalBtn portalBtnSecondary" onClick={onRetry}>Try Again</button>
-        </div>
+  if (error) return (
+    <div className="apptCal">
+      <CalNav year={year} month={month} onMonthNav={onMonthNav} />
+      <div className="apptCalEmpty">
+        <div style={{ fontSize: "1.4rem", marginBottom: 8 }}>⚠️</div>
+        <p style={{ fontWeight: 600, marginBottom: 6 }}>Could not load appointments</p>
+        <button className="portalBtn portalBtnSecondary" onClick={onRetry}>Try Again</button>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <div className="apptCal">
       <CalNav year={year} month={month} onMonthNav={onMonthNav} />
 
-      {/* Week day headers */}
       <div className="apptCalWeekRow">
         {WEEK_DAYS.map((d) => (
           <div key={d} className="apptCalWeekLabel">{d}</div>
         ))}
       </div>
 
-      {/* Day grid */}
       <div className="apptCalGrid">
         {cells.map((cell, i) => {
           const key      = `${cell.y}-${cell.m}-${cell.day}`;
@@ -876,33 +1168,30 @@ function AppCalendar({ requests, calMonth, onMonthNav, onSelect, selected, loadi
           return (
             <div
               key={i}
-              className={[
-                "apptCalCell",
-                cell.other  ? "otherMonth" : "",
-                isToday     ? "today"      : "",
-              ].filter(Boolean).join(" ")}
+              className={["apptCalCell", cell.other ? "otherMonth" : "", isToday ? "today" : ""].filter(Boolean).join(" ")}
             >
               <div className="apptCalDayNum">{cell.day}</div>
-              {visible.map((r) => (
-                <button
-                  key={r.id}
-                  className={[
-                    "apptCalEvent",
-                    `status-${r.status}`,
-                    selected?.id === r.id ? "selected" : "",
-                  ].filter(Boolean).join(" ")}
-                  onClick={() => onSelect(r)}
-                  title={`${r.name}${r.service_requested ? " — " + r.service_requested : ""}${r.preferred_date ? " · " + r.preferred_date : ""}`}
-                >
-                  {r.name}
-                  {r.service_requested && (
-                    <span className="apptCalEventSub"> · {r.service_requested}</span>
-                  )}
-                </button>
-              ))}
-              {overflow > 0 && (
-                <div className="apptCalMore">+{overflow} more</div>
-              )}
+              {visible.map((r) => {
+                const timeLabel = fmtTime(r.scheduled_start);
+                const svc       = r.scheduled_service || r.service_requested;
+                return (
+                  <button
+                    key={r.id}
+                    className={[
+                      "apptCalEvent",
+                      `status-${r.status}`,
+                      selected?.id === r.id ? "selected" : "",
+                    ].filter(Boolean).join(" ")}
+                    onClick={() => onSelect(r)}
+                    title={`${r.name}${svc ? " — " + svc : ""}${timeLabel ? " · " + timeLabel : ""}`}
+                  >
+                    {timeLabel && <span className="apptCalEventTime">{timeLabel} </span>}
+                    {r.name}
+                    {svc && <span className="apptCalEventSub"> · {svc}</span>}
+                  </button>
+                );
+              })}
+              {overflow > 0 && <div className="apptCalMore">+{overflow} more</div>}
             </div>
           );
         })}
@@ -911,14 +1200,17 @@ function AppCalendar({ requests, calMonth, onMonthNav, onSelect, selected, loadi
       {!hasThisMonth && (
         <div className="apptCalEmpty">
           <i className="fa-regular fa-calendar-xmark" style={{ fontSize: "1.6rem", display: "block", marginBottom: 10, opacity: .25 }}></i>
-          No appointments for {MONTH_NAMES[month]} {year}.
+          No scheduled appointments for {MONTH_NAMES[month]} {year}.
+          <span style={{ display: "block", fontSize: ".8rem", marginTop: 6, opacity: .7 }}>
+            Schedule a request from the list below.
+          </span>
         </div>
       )}
     </div>
   );
 }
 
-/* ── Calendar navigation bar ─────────────────────────────── */
+/* ── Calendar navigation bar ── */
 function CalNav({ year, month, onMonthNav }) {
   return (
     <div className="apptCalNav">
@@ -926,9 +1218,7 @@ function CalNav({ year, month, onMonthNav }) {
         <button className="apptCalNavBtn" onClick={() => onMonthNav(-1)} aria-label="Previous month">
           <i className="fa-solid fa-chevron-left"></i>
         </button>
-        <button className="apptCalNavBtn" onClick={() => onMonthNav(0)}>
-          Today
-        </button>
+        <button className="apptCalNavBtn" onClick={() => onMonthNav(0)}>Today</button>
         <button className="apptCalNavBtn" onClick={() => onMonthNav(1)} aria-label="Next month">
           <i className="fa-solid fa-chevron-right"></i>
         </button>
@@ -936,7 +1226,7 @@ function CalNav({ year, month, onMonthNav }) {
       <span className="apptCalNavTitle">{MONTH_NAMES[month]} {year}</span>
       <span className="apptCalNavNote">
         <i className="fa-solid fa-circle-info" style={{ marginRight: 4, opacity: .6 }}></i>
-        Shown by submission date
+        Confirmed &amp; scheduled appointments only
       </span>
     </div>
   );

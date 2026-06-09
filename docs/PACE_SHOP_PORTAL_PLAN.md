@@ -227,6 +227,15 @@ These are larger than the Phase 13 incremental edits. They touch portal detail U
 - `docs/OWNER_USER_MANUAL.md` created — 20-section non-technical guide written for shop owners, front desk staff, and technicians. Covers every portal page, recommended daily workflow, common scenarios, troubleshooting, what not to do, and a quick reference cheat sheet. Suitable for distribution directly to owners.
 - `docs/OWNER_QUICK_START.md` created — 1–2 page companion quick-start guide covering login, daily workflow table, main pages, RO creation, estimate/invoice flow, presets, safety rules, and quick troubleshooting. Designed to be sent alongside the full manual as an at-a-glance reference.
 
+- ✅ **17A — Appointment Scheduling Workflow**
+  - Calendar now shows only appointments with a confirmed scheduled date (`scheduled_start`). Unscheduled web form requests do NOT appear on the calendar.
+  - Incoming requests remain in a list/table below the calendar until staff schedules and confirms them.
+  - Detail modal: staff can save scheduling details (date, time, end time, service), confirm the appointment (adds it to the calendar), send a reply email to the customer, and change status (Pending / Processing / Confirmed / Cancelled).
+  - `processing` status added (staff has replied / is actively handling the request).
+  - Reply email sent via new `send-appointment-reply` Netlify Function (Resend). No email = phone-reply notice, no crash.
+  - Migration 013: adds `scheduled_start/end/service`, `reply_message`, `replied_at`, `confirmed_at`, `cancelled_at` to `appointment_requests`. Status constraint updated to include `processing`.
+  - No Google Calendar sync. No SMS. No drag-to-reschedule. No PIN login changes.
+
 - ✅ **16C — In-Portal Help / Instructions Page**
   - `/portal/help` route added; Help link in sidebar footer (Setup section, below Presets).
   - `src/pages/portal/PortalHelp.jsx` — 14-section accordion staff reference (daily workflow card + Troubleshooting, Pricing & Markup, What Not To Do, and 10 other sections).
