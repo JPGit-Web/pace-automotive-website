@@ -515,7 +515,7 @@ Replaces direct browser-to-Supabase password login with a server-side PIN exchan
 Staff visits /portal/login
   → enters username/email + 4-digit PIN
   → browser POSTs { identifier, pin } to /.netlify/functions/portal-pin-login
-  → function validates PIN === PORTAL_LOGIN_PIN (server-side env var)
+  → function computes sha256(PORTAL_LOGIN_PIN_SALT + ":" + pin) and compares to PORTAL_LOGIN_PIN_HASH via timingSafeEqual
   → function calls Supabase Auth REST endpoint with PORTAL_ADMIN_EMAIL + PORTAL_ADMIN_PASSWORD
   → function returns { access_token, refresh_token, expires_at, user_email }
   → browser calls supabase.auth.setSession({ access_token, refresh_token })
@@ -527,7 +527,9 @@ Staff visits /portal/login
 - The Supabase Auth call is made server-side (Node.js runtime) — the password is never serialized into any HTTP response.
 
 **PIN security:**
-- `PORTAL_LOGIN_PIN` is a Netlify Function env var. It is never hardcoded in `src/`.
+- The raw PIN is never stored anywhere — only a salted SHA-256 hash (`PORTAL_LOGIN_PIN_HASH`) and a salt (`PORTAL_LOGIN_PIN_SALT`) are stored as Netlify env vars.
+- The function computes `sha256(PORTAL_LOGIN_PIN_SALT + ":" + pin)` and compares it to `PORTAL_LOGIN_PIN_HASH` using `crypto.timingSafeEqual` to prevent timing attacks.
+- This also avoids Netlify secret scanning false positives: `8240` is a 4-digit number that also appears in the shop address, so storing the raw PIN caused scanner collisions. Storing only the hash eliminates this.
 - Client-side guard (`/^\d{4}$/.test(pin)`) reduces invalid requests; server re-validates independently.
 - All validation failures (wrong PIN, wrong username, format error) return the same generic `"Invalid username or PIN"` — no enumeration of which field failed.
 - Brute-force mitigation: Netlify's request rate limits + Supabase Auth's own auth protections.
@@ -544,7 +546,8 @@ Staff visits /portal/login
 - No fake `localStorage` auth bypass.
 
 **Secrets used:**
-- `PORTAL_LOGIN_PIN` — Netlify Function env var only.
+- `PORTAL_LOGIN_PIN_HASH` — SHA-256 hex hash of `${PORTAL_LOGIN_PIN_SALT}:${pin}`. Netlify Function env var only.
+- `PORTAL_LOGIN_PIN_SALT` — Random salt string. Netlify Function env var only.
 - `PORTAL_ADMIN_EMAIL` — Netlify Function env var only.
 - `PORTAL_ADMIN_PASSWORD` — Netlify Function env var only.
 - `SUPABASE_ANON_KEY` / `VITE_SUPABASE_ANON_KEY` — anon/publishable key; safe for auth sign-in. Used via fallback pattern.

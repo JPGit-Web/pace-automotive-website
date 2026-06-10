@@ -1006,7 +1006,7 @@ Setup (section label) → Presets (NavLink, active-highlighted) → P.A.C.E. Por
 **Architecture:**
 The login is a two-factor-style exchange:
 1. Browser sends `{ identifier, pin }` to `/.netlify/functions/portal-pin-login`.
-2. Netlify Function validates the PIN against `PORTAL_LOGIN_PIN` (env var).
+2. Netlify Function computes `sha256(PORTAL_LOGIN_PIN_SALT + ":" + pin)` and compares it to `PORTAL_LOGIN_PIN_HASH` via `timingSafeEqual`. Raw PIN is never stored — only a salted hash.
 3. If valid, the function calls the Supabase Auth REST API server-side using `PORTAL_ADMIN_EMAIL` + `PORTAL_ADMIN_PASSWORD` (both env vars, never in `src/`).
 4. The function returns `{ access_token, refresh_token, expires_at, user_email }`.
 5. Browser calls `supabase.auth.setSession({ access_token, refresh_token })` to establish the session.
@@ -1014,14 +1014,15 @@ The login is a two-factor-style exchange:
 
 **`netlify/functions/portal-pin-login.js`:**
 - POST only.
-- Validates PIN is exactly 4 digits and matches `PORTAL_LOGIN_PIN`.
+- Validates PIN is exactly 4 digits, then verifies `sha256(PORTAL_LOGIN_PIN_SALT + ":" + pin) === PORTAL_LOGIN_PIN_HASH` via `timingSafeEqual`.
+- Raw PIN is never stored. Storing only a salted hash avoids Netlify secret scanning false positives (e.g. `8240` appearing in the shop address).
 - Normalizes identifier: `@` → literal email; `"paceadmin"` or `"admin"` → `PORTAL_ADMIN_EMAIL`; unknown username → generic error.
 - Confirms resolved email matches `PORTAL_ADMIN_EMAIL` to prevent a valid PIN signing in a different Supabase account.
 - Signs in via `POST {SUPABASE_URL}/auth/v1/token?grant_type=password` using the anon key (`SUPABASE_ANON_KEY || VITE_SUPABASE_ANON_KEY`).
 - Returns only tokens and user email — never the password.
 - Returns the same generic "Invalid username or PIN" message for any validation failure (no enumeration).
-- Logs are redacted (no PIN, no password, email domain masked).
-- Required env vars: `PORTAL_LOGIN_PIN`, `PORTAL_ADMIN_EMAIL`, `PORTAL_ADMIN_PASSWORD`, `SUPABASE_URL`/`VITE_SUPABASE_URL`, `SUPABASE_ANON_KEY`/`VITE_SUPABASE_ANON_KEY`.
+- Logs are redacted (no PIN, no hash, no password, email domain masked).
+- Required env vars: `PORTAL_LOGIN_PIN_HASH`, `PORTAL_LOGIN_PIN_SALT`, `PORTAL_ADMIN_EMAIL`, `PORTAL_ADMIN_PASSWORD`, `SUPABASE_URL`/`VITE_SUPABASE_URL`, `SUPABASE_ANON_KEY`/`VITE_SUPABASE_ANON_KEY`.
 
 **`src/pages/portal/PortalLogin.jsx`:**
 - `identifier` field (type=text, autoComplete=username) — accepts `paceadmin` or email.
@@ -1032,7 +1033,7 @@ The login is a two-factor-style exchange:
 - All existing flows unchanged: sign-out, route protection, inactivity timer.
 
 **`.env.example`:**
-- Added `PORTAL_LOGIN_PIN=`, `PORTAL_ADMIN_EMAIL=`, `PORTAL_ADMIN_PASSWORD=`, `SUPABASE_ANON_KEY=` with documentation comments.
+- Added `PORTAL_LOGIN_PIN_HASH=`, `PORTAL_LOGIN_PIN_SALT=`, `PORTAL_ADMIN_EMAIL=`, `PORTAL_ADMIN_PASSWORD=`, `SUPABASE_ANON_KEY=` with documentation comments and hash generation one-liner.
 
 **Must test via Netlify Dev (`http://localhost:8888`) — not Vite (`http://localhost:5173`), because Netlify Functions are not available in plain Vite.**
 

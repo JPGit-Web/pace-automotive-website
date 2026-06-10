@@ -229,7 +229,7 @@ These are larger than the Phase 13 incremental edits. They touch portal detail U
 
 - ✅ **17B — 4-Digit PIN Portal Login**
   - Staff log in with a staff username (`paceadmin`) or email address + a 4-digit PIN instead of a full password.
-  - New Netlify Function `portal-pin-login.js`: validates PIN server-side against `PORTAL_LOGIN_PIN` env var, then exchanges for real Supabase session tokens using `PORTAL_ADMIN_EMAIL` + `PORTAL_ADMIN_PASSWORD` (both server-side env vars, never in `src/`).
+  - New Netlify Function `portal-pin-login.js`: validates PIN by computing `sha256(PORTAL_LOGIN_PIN_SALT + ":" + pin)` and comparing to `PORTAL_LOGIN_PIN_HASH` via `timingSafeEqual`. Raw PIN is never stored — only a salted hash. This avoids Netlify secret scanning false positives. Then exchanges for real Supabase session tokens using `PORTAL_ADMIN_EMAIL` + `PORTAL_ADMIN_PASSWORD` (both server-side env vars, never in `src/`).
   - Frontend receives `{ access_token, refresh_token }` and calls `supabase.auth.setSession()` — establishing a real Supabase session. All existing route protection, sign-out, and inactivity auto-sign-out remain unchanged.
   - All validation failures return the same generic error message (no enumeration of which field failed).
   - `PORTAL_ADMIN_PASSWORD` is never sent to the browser.
