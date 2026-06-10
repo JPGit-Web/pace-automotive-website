@@ -5,11 +5,11 @@ import "../../styles/portal.css";
 
 export default function PortalLogin() {
   const navigate = useNavigate();
-  const [email,       setEmail]       = useState("");
-  const [password,    setPassword]    = useState("");
-  const [showPassword,setShowPassword]= useState(false);
-  const [loading,     setLoading]     = useState(false);
-  const [error,       setError]       = useState("");
+  const [identifier, setIdentifier] = useState("");
+  const [pin,        setPin]        = useState("");
+  const [showPin,    setShowPin]    = useState(false);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState("");
 
   // If already logged in, skip the login page entirely
   useEffect(() => {
@@ -21,22 +21,52 @@ export default function PortalLogin() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email:    email.trim(),
-      password,
-    });
-
-    setLoading(false);
-
-    if (authError) {
-      // Generic message — never reveal whether the email or password is wrong
-      setError("Unable to sign in. Please check your credentials and try again.");
+    // Basic client-side guard — server re-validates everything
+    if (!identifier.trim()) {
+      setError("Please enter your username or email.");
+      return;
+    }
+    if (!/^\d{4}$/.test(pin)) {
+      setError("PIN must be exactly 4 digits.");
       return;
     }
 
-    navigate("/portal/dashboard", { replace: true });
+    setLoading(true);
+
+    try {
+      const res = await fetch("/.netlify/functions/portal-pin-login", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ identifier: identifier.trim(), pin }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Unable to sign in. Please try again.");
+        return;
+      }
+
+      // Establish the Supabase session using the tokens returned by the function.
+      // The real password never touches the browser.
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token:  data.access_token,
+        refresh_token: data.refresh_token,
+      });
+
+      if (sessionError) {
+        console.error("[PortalLogin] setSession error:", sessionError.message);
+        setError("Session error. Please try again.");
+        return;
+      }
+
+      navigate("/portal/dashboard", { replace: true });
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -50,40 +80,53 @@ export default function PortalLogin() {
         </p>
         <hr className="portalLoginDivider" />
 
+        <p style={{ fontSize: ".78rem", color: "#7a8299", textAlign: "center", margin: "0 0 16px", lineHeight: 1.5 }}>
+          Enter your staff username or email and PIN.
+        </p>
+
         <form onSubmit={handleSubmit} style={{ textAlign: "left" }}>
           <div style={styles.field}>
-            <label style={styles.label} htmlFor="email">Email</label>
+            <label style={styles.label} htmlFor="identifier">Username or Email</label>
             <input
-              id="email"
-              type="email"
-              autoComplete="email"
+              id="identifier"
+              type="text"
+              autoComplete="username"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               style={styles.input}
-              placeholder="staff@example.com"
+              placeholder="username"
               disabled={loading}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
             />
           </div>
 
           <div style={{ ...styles.field, marginBottom: "20px" }}>
-            <label style={styles.label} htmlFor="password">Password</label>
+            <label style={styles.label} htmlFor="pin">PIN</label>
             <div style={{ position: "relative" }}>
               <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
+                id="pin"
+                type={showPin ? "text" : "password"}
+                inputMode="numeric"
+                autoComplete="off"
                 required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={{ ...styles.input, paddingRight: "42px" }}
-                placeholder="••••••••••••"
+                maxLength={4}
+                value={pin}
+                onChange={(e) => {
+                  // Strip non-digits and cap at 4 characters
+                  const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+                  setPin(digits);
+                }}
+                style={{ ...styles.input, paddingRight: "42px", letterSpacing: showPin ? "0.2em" : "0.3em" }}
+                placeholder="••••••"
                 disabled={loading}
               />
               <button
                 type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
+                onClick={() => setShowPin((v) => !v)}
+                aria-label={showPin ? "Hide PIN" : "Show PIN"}
                 tabIndex={0}
                 style={{
                   position: "absolute", right: "10px", top: "50%",
@@ -94,7 +137,7 @@ export default function PortalLogin() {
                   lineHeight: 1,
                 }}
               >
-                <i className={showPassword ? "fa-solid fa-eye-slash" : "fa-solid fa-eye"}></i>
+                <i className={showPin ? "fa-solid fa-eye-slash" : "fa-solid fa-eye"}></i>
               </button>
             </div>
           </div>

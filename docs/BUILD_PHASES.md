@@ -828,6 +828,7 @@ markup_percent      numeric(5,2) null,  -- e.g. 30.00 for 30%
 | docs | Owner Quick Start Guide — 1–2 page companion reference for daily use alongside the full manual | ✅ Complete |
 | 16C | In-portal Help page — accordion staff reference, daily workflow card, route `/portal/help`, sidebar Setup link | ✅ Complete |
 | 17A | Appointment scheduling workflow — calendar shows only scheduled appointments, request list below, detail modal with scheduling fields, reply email, processing status | ✅ Complete |
+| 17B | 4-digit PIN portal login — PIN validated server-side via Netlify Function; real password never reaches the browser | ✅ Complete |
 
 ---
 
@@ -994,6 +995,58 @@ Setup (section label) → Presets (NavLink, active-highlighted) → P.A.C.E. Por
 - [x] Daily Workflow card visible at top with 10 numbered steps.
 - [x] Pricing & Markup section shows safety callout confirming internal pricing is never exposed.
 - [x] No internal pricing, secrets, or sensitive data anywhere on the page.
+- [x] Build passes.
+
+---
+
+### Phase 17B — 4-Digit PIN Portal Login
+
+**Problem solved:** Staff previously logged in with an email address and full Supabase Auth password. The PIN approach improves day-to-day usability: staff type a short 4-digit code instead of a long password, and the real password is never exposed to the browser.
+
+**Architecture:**
+The login is a two-factor-style exchange:
+1. Browser sends `{ identifier, pin }` to `/.netlify/functions/portal-pin-login`.
+2. Netlify Function validates the PIN against `PORTAL_LOGIN_PIN` (env var).
+3. If valid, the function calls the Supabase Auth REST API server-side using `PORTAL_ADMIN_EMAIL` + `PORTAL_ADMIN_PASSWORD` (both env vars, never in `src/`).
+4. The function returns `{ access_token, refresh_token, expires_at, user_email }`.
+5. Browser calls `supabase.auth.setSession({ access_token, refresh_token })` to establish the session.
+6. ProtectedRoute, sign-out, and inactivity auto-sign-out all remain unchanged — they work against the real Supabase session.
+
+**`netlify/functions/portal-pin-login.js`:**
+- POST only.
+- Validates PIN is exactly 4 digits and matches `PORTAL_LOGIN_PIN`.
+- Normalizes identifier: `@` → literal email; `"paceadmin"` or `"admin"` → `PORTAL_ADMIN_EMAIL`; unknown username → generic error.
+- Confirms resolved email matches `PORTAL_ADMIN_EMAIL` to prevent a valid PIN signing in a different Supabase account.
+- Signs in via `POST {SUPABASE_URL}/auth/v1/token?grant_type=password` using the anon key (`SUPABASE_ANON_KEY || VITE_SUPABASE_ANON_KEY`).
+- Returns only tokens and user email — never the password.
+- Returns the same generic "Invalid username or PIN" message for any validation failure (no enumeration).
+- Logs are redacted (no PIN, no password, email domain masked).
+- Required env vars: `PORTAL_LOGIN_PIN`, `PORTAL_ADMIN_EMAIL`, `PORTAL_ADMIN_PASSWORD`, `SUPABASE_URL`/`VITE_SUPABASE_URL`, `SUPABASE_ANON_KEY`/`VITE_SUPABASE_ANON_KEY`.
+
+**`src/pages/portal/PortalLogin.jsx`:**
+- `identifier` field (type=text, autoComplete=username) — accepts `paceadmin` or email.
+- `pin` field (type=password, inputMode=numeric, maxLength=4) — digits only filter in `onChange`.
+- Show/hide toggle preserved.
+- Helper text: "Enter your staff username or email and 4-digit PIN."
+- Submit calls `/.netlify/functions/portal-pin-login`, then `supabase.auth.setSession()`, then navigate.
+- All existing flows unchanged: sign-out, route protection, inactivity timer.
+
+**`.env.example`:**
+- Added `PORTAL_LOGIN_PIN=`, `PORTAL_ADMIN_EMAIL=`, `PORTAL_ADMIN_PASSWORD=`, `SUPABASE_ANON_KEY=` with documentation comments.
+
+**Must test via Netlify Dev (`http://localhost:8888`) — not Vite (`http://localhost:5173`), because Netlify Functions are not available in plain Vite.**
+
+**Acceptance criteria:**
+- [x] Login with `paceadmin` + correct PIN → dashboard loads.
+- [x] Login with full email + correct PIN → dashboard loads.
+- [x] Wrong PIN → generic error, no dashboard.
+- [x] Non-4-digit PIN → error.
+- [x] Unknown username → same generic error.
+- [x] Sign out still works.
+- [x] Route protection still works.
+- [x] Inactivity auto sign-out still works.
+- [x] No secrets in browser console, network tab, or `src/`.
+- [x] No `.delete()` calls.
 - [x] Build passes.
 
 ---

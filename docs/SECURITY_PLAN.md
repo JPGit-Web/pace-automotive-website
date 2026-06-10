@@ -502,6 +502,59 @@ New scheduling columns added by migration 013 (`scheduled_start`, `scheduled_end
 - The public web form `send-inquiry.js` inserts a fixed column subset and is unaffected by new columns.
 - RLS on `appointment_requests` blocks anon access — table remains staff-only.
 
+---
+
+## 17. Phase 17B — PIN Login Security Notes (Complete)
+
+### New Netlify Function: `portal-pin-login.js`
+
+Replaces direct browser-to-Supabase password login with a server-side PIN exchange.
+
+**Flow:**
+```
+Staff visits /portal/login
+  → enters username/email + 4-digit PIN
+  → browser POSTs { identifier, pin } to /.netlify/functions/portal-pin-login
+  → function validates PIN === PORTAL_LOGIN_PIN (server-side env var)
+  → function calls Supabase Auth REST endpoint with PORTAL_ADMIN_EMAIL + PORTAL_ADMIN_PASSWORD
+  → function returns { access_token, refresh_token, expires_at, user_email }
+  → browser calls supabase.auth.setSession({ access_token, refresh_token })
+  → redirect to /portal/dashboard
+```
+
+**Password protection:**
+- `PORTAL_ADMIN_PASSWORD` is a Netlify Function env var. It never appears in `src/`, the browser, network tab responses, or logs.
+- The Supabase Auth call is made server-side (Node.js runtime) — the password is never serialized into any HTTP response.
+
+**PIN security:**
+- `PORTAL_LOGIN_PIN` is a Netlify Function env var. It is never hardcoded in `src/`.
+- Client-side guard (`/^\d{4}$/.test(pin)`) reduces invalid requests; server re-validates independently.
+- All validation failures (wrong PIN, wrong username, format error) return the same generic `"Invalid username or PIN"` — no enumeration of which field failed.
+- Brute-force mitigation: Netlify's request rate limits + Supabase Auth's own auth protections.
+
+**Identifier normalization:**
+- `@` in identifier → treated as literal email.
+- `"paceadmin"` or `"admin"` → resolved to `PORTAL_ADMIN_EMAIL`.
+- Any other username → generic error (same message as wrong PIN).
+- Resolved email is verified `=== PORTAL_ADMIN_EMAIL` to prevent a valid PIN from signing into a different Supabase account via email enumeration.
+
+**Session integrity:**
+- Returns real Supabase JWT tokens. `supabase.auth.setSession()` establishes a real Supabase session.
+- `ProtectedRoute.jsx`, sign-out, and inactivity auto-sign-out are all unchanged and continue to work against the Supabase session.
+- No fake `localStorage` auth bypass.
+
+**Secrets used:**
+- `PORTAL_LOGIN_PIN` — Netlify Function env var only.
+- `PORTAL_ADMIN_EMAIL` — Netlify Function env var only.
+- `PORTAL_ADMIN_PASSWORD` — Netlify Function env var only.
+- `SUPABASE_ANON_KEY` / `VITE_SUPABASE_ANON_KEY` — anon/publishable key; safe for auth sign-in. Used via fallback pattern.
+
+**Logging:**
+- Success log redacts email (shows only first 2 chars + `***@domain`).
+- Failure logs show Supabase error message only (never the PIN or password).
+
+---
+
 ### Google Calendar Sync — Deliberately Deferred
 
 No OAuth tokens, Google API keys, or Google Calendar credentials are present in this codebase.

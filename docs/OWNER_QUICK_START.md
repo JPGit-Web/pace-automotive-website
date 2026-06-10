@@ -11,7 +11,7 @@ Portal: **powerautomotive.ca/portal**
 
 **Login:**
 1. Go to **powerautomotive.ca/portal**
-2. Enter your staff email and password → click **Sign In**
+2. Enter your staff username (`paceadmin`) or email + your 4-digit PIN → click **Sign In**
 
 **Sign out:**
 Click **Sign Out** at the bottom of the left sidebar. Always sign out when done, especially on a shared computer.

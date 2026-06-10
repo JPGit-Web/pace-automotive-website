@@ -54,10 +54,11 @@ The portal is for **staff use only**. Customers never see the portal — they on
 ### Logging In
 
 1. Open a web browser and go to **powerautomotive.ca/portal**
-2. Enter your staff email address and password
-3. Click **Sign In**
+2. Enter your staff username (`paceadmin`) or staff email address
+3. Enter your 4-digit PIN
+4. Click **Sign In**
 
-If you enter the wrong password, you will see an error message. Try again or contact the shop owner to reset your credentials.
+If you enter the wrong PIN or username, you will see an error message. Try again or contact the shop owner to reset your PIN.
 
 > **Tip:** Bookmark the portal address so you can find it quickly each day.
 

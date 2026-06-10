@@ -227,6 +227,13 @@ These are larger than the Phase 13 incremental edits. They touch portal detail U
 - `docs/OWNER_USER_MANUAL.md` created — 20-section non-technical guide written for shop owners, front desk staff, and technicians. Covers every portal page, recommended daily workflow, common scenarios, troubleshooting, what not to do, and a quick reference cheat sheet. Suitable for distribution directly to owners.
 - `docs/OWNER_QUICK_START.md` created — 1–2 page companion quick-start guide covering login, daily workflow table, main pages, RO creation, estimate/invoice flow, presets, safety rules, and quick troubleshooting. Designed to be sent alongside the full manual as an at-a-glance reference.
 
+- ✅ **17B — 4-Digit PIN Portal Login**
+  - Staff log in with a staff username (`paceadmin`) or email address + a 4-digit PIN instead of a full password.
+  - New Netlify Function `portal-pin-login.js`: validates PIN server-side against `PORTAL_LOGIN_PIN` env var, then exchanges for real Supabase session tokens using `PORTAL_ADMIN_EMAIL` + `PORTAL_ADMIN_PASSWORD` (both server-side env vars, never in `src/`).
+  - Frontend receives `{ access_token, refresh_token }` and calls `supabase.auth.setSession()` — establishing a real Supabase session. All existing route protection, sign-out, and inactivity auto-sign-out remain unchanged.
+  - All validation failures return the same generic error message (no enumeration of which field failed).
+  - `PORTAL_ADMIN_PASSWORD` is never sent to the browser.
+
 - ✅ **17A — Appointment Scheduling Workflow**
   - Calendar now shows only appointments with a confirmed scheduled date (`scheduled_start`). Unscheduled web form requests do NOT appear on the calendar.
   - Incoming requests remain in a list/table below the calendar until staff schedules and confirms them.
